@@ -5,6 +5,9 @@ import io
 import re
 import os
 import json
+import base64
+import gzip
+import time
 from pathlib import Path
 
 # Read API key from .env
@@ -32,6 +35,25 @@ if "cover_letter" not in st.session_state:
 if "saved_profiles" not in st.session_state:
     st.session_state.saved_profiles = []
 
+# Helper: persist profiles to URL (survives page refresh)
+def persist_profiles():
+    if st.session_state.saved_profiles:
+        raw = json.dumps(st.session_state.saved_profiles, ensure_ascii=False)
+        st.query_params["profiles"] = base64.b64encode(gzip.compress(raw.encode("utf-8"))).decode("utf-8")
+    else:
+        st.query_params.pop("profiles", None)
+
+# Restore profiles from URL on first load
+if "profiles_init" not in st.session_state:
+    stored = st.query_params.get("profiles")
+    if stored:
+        try:
+            decoded = gzip.decompress(base64.b64decode(stored)).decode("utf-8")
+            st.session_state.saved_profiles = json.loads(decoded)
+        except Exception:
+            pass
+    st.session_state.profiles_init = True
+
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -54,6 +76,7 @@ with st.sidebar:
             data = json.loads(imported_file.read())
             if isinstance(data, list):
                 st.session_state.saved_profiles.extend(data)
+                persist_profiles()
                 st.success(f"✅ {len(data)} profils importés")
                 st.rerun()
         except Exception:
@@ -75,6 +98,7 @@ with st.sidebar:
             with cols[1]:
                 if st.button("🗑️", key=f"del_sp_{idx}"):
                     st.session_state.saved_profiles.pop(idx)
+                    persist_profiles()
                     st.rerun()
 
         # Export all
@@ -86,7 +110,6 @@ with st.sidebar:
 # ---------- AI Call ----------
 def call_ai(prompt: str, system: str = "") -> str:
     key = os.environ.get("OPENROUTER_API_KEY", "")
-    import time
     for attempt in range(3):
         try:
             resp = requests.post(
@@ -225,6 +248,7 @@ Offre à cibler :
     )
     if name_key and not exists:
         st.session_state.saved_profiles.append(profile)
+        persist_profiles()
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
@@ -284,7 +308,6 @@ if st.session_state.profile:
             if not start and not end: return ""
             if not start: return esc_html(end or "")
             if not end: return esc_html(start)
-            import re
             sy = re.search(r"(\d{4})", start)
             ey = re.search(r"(\d{4})", end)
             if sy and ey and sy.group(1) == ey.group(1):
