@@ -18,6 +18,20 @@ st.set_page_config(page_title="CV Optimizer IA", layout="centered")
 st.title("📄 CV Optimizer IA")
 st.info("🤖 Importe **plusieurs CV** → L'IA les fusionne → Colle une offre → **1 CV optimisé**")
 
+# ---------- Session state ----------
+if "profile" not in st.session_state:
+    st.session_state.profile = None
+if "opt_data" not in st.session_state:
+    st.session_state.opt_data = None
+if "extracted" not in st.session_state:
+    st.session_state.extracted = None
+if "jd_text" not in st.session_state:
+    st.session_state.jd_text = None
+if "cover_letter" not in st.session_state:
+    st.session_state.cover_letter = None
+if "saved_profiles" not in st.session_state:
+    st.session_state.saved_profiles = []
+
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -110,20 +124,6 @@ def call_ai(prompt: str, system: str = "") -> str:
 uploaded_files = st.file_uploader("📤 Importer plusieurs CV (PDF)", type=["pdf"], accept_multiple_files=True)
 jd_text = st.text_area("📋 Coller l'offre d'emploi", height=150,
                        placeholder="Colle ici le texte complet de l'offre...")
-
-# ---------- Session state ----------
-if "profile" not in st.session_state:
-    st.session_state.profile = None
-if "opt_data" not in st.session_state:
-    st.session_state.opt_data = None
-if "extracted" not in st.session_state:
-    st.session_state.extracted = None
-if "jd_text" not in st.session_state:
-    st.session_state.jd_text = None
-if "cover_letter" not in st.session_state:
-    st.session_state.cover_letter = None
-if "saved_profiles" not in st.session_state:
-    st.session_state.saved_profiles = []
 
 # ---------- Extract & Optimize ----------
 if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_width=True):
