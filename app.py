@@ -71,8 +71,8 @@ def load_cloud():
         resp = sb.table("cv_texts").select("texts").eq("user_id", st.session_state.sb_user.id).execute()
         if resp.data:
             st.session_state.source_texts = resp.data[0].get("texts", [])
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"❌ Erreur chargement cloud : {e}")
 
 def save_cloud():
     if not sb or not st.session_state.sb_user:
@@ -83,8 +83,8 @@ def save_cloud():
             {"user_id": st.session_state.sb_user.id, "texts": st.session_state.source_texts, "updated_at": now},
             on_conflict="user_id"
         ).execute()
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"❌ Erreur sauvegarde cloud : {e}")
 
 # Auto-sync from cloud on every rerun
 if sb and st.session_state.sb_user:
@@ -97,8 +97,8 @@ if sb and st.session_state.sb_user:
             if cloud_ts != st.session_state.get("last_sync_ts", ""):
                 st.session_state.source_texts = cloud_texts
                 st.session_state.last_sync_ts = cloud_ts
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"❌ Erreur synchro cloud : {e}")
 
 # ---------- Sidebar ----------
 with st.sidebar:
