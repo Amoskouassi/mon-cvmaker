@@ -665,27 +665,15 @@ if st.session_state.profile:
         with open(out_file, "rb") as f:
             pdf_bytes = f.read()
         pdf_b64 = base64.b64encode(pdf_bytes).decode()
-        st.session_state.pdf_bytes = pdf_bytes
-        st.session_state.pdf_b64 = pdf_b64
-        st.session_state.pdf_filename = pdf_filename
-        st.rerun()
-
-    # Show PDF preview from session state
-    if st.session_state.get("pdf_b64"):
-        pdf_b64 = st.session_state.pdf_b64
-        pdf_bytes = st.session_state.pdf_bytes
-        pdf_filename = st.session_state.pdf_filename
-        if not gen_pdf:  # Only auto-show on rerun after generation
-            pass
+        pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
 
         st.components.v1.html(
-            f'<embed src="data:application/pdf;base64,{pdf_b64}" type="application/pdf" width="100%" height="600" />'
-            f'<div style="text-align:center;margin-top:8px;">'
-            f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" '
-            f'style="display:inline-block;padding:10px 20px;background:#C5A059;'
+            f'<div style="text-align:center;">'
+            f'<a href="{pdf_data_uri}" target="_blank" '
+            f'style="display:inline-block;padding:12px 24px;background:#C5A059;'
             f'color:white;text-decoration:none;border-radius:6px;font-weight:700;">'
-            f'👁️ Ouvrir dans un nouvel onglet</a></div>',
-            height=660
+            f'👁️ Ouvrir le PDF dans un nouvel onglet</a></div>',
+            height=60
         )
 
         st.download_button("📄 Télécharger le CV (PDF)", data=pdf_bytes, file_name=pdf_filename,
