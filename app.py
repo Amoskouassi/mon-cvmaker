@@ -386,6 +386,34 @@ if st.session_state.profile:
         location = st.text_input("Localisation", value=p.get("location", ""), key="edit_location")
         company = st.text_input("Entreprise ciblée", value=profile.get("_target_company", ""), key="edit_company")
 
+    st.divider()
+    st.subheader("🤖 Modification par IA")
+    mod_prompt = st.text_area("Dis à l'IA ce que tu veux modifier",
+                              placeholder='Ex: "ajoute Python à mes compétences", "change le titre en Senior Developer", "supprime l\'expérience chez X"',
+                              key="mod_prompt")
+    if st.button("✏️ Appliquer la modification", use_container_width=True, key="btn_mod") and mod_prompt.strip():
+        with st.spinner("🤖 Modification en cours..."):
+            current_json = json.dumps(st.session_state.opt_data or st.session_state.profile, ensure_ascii=False, indent=2)
+            mod_result = call_ai(
+                f"Voici un profil CV en JSON. Applique UNIQUEMENT la modification demandée sans changer le reste.\n\n"
+                f"Profil actuel :\n{current_json}\n\n"
+                f"Modification demandée : {mod_prompt}\n\n"
+                f"Réponds UNIQUEMENT avec le JSON complet modifié, sans texte avant ni après.",
+                "Tu modifies un profil CV. Retourne UNIQUEMENT le JSON modifié, valide, sans aucun texte autour."
+            )
+            mod_result = re.sub(r"^```(?:json)?\s*|\s*```$", "", mod_result, flags=re.MULTILINE).strip()
+            json_match = re.search(r"\{.*\}", mod_result, re.DOTALL)
+            if json_match:
+                mod_result = json_match.group()
+            try:
+                new_profile = json.loads(mod_result)
+                st.session_state.profile = new_profile
+                st.session_state.opt_data = new_profile
+                st.rerun()
+            except json.JSONDecodeError:
+                st.error("❌ L'IA n'a pas retourné un JSON valide.")
+                st.code(mod_result[:1000])
+
     gen_pdf = st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf")
     gen_cl = st.button("✍️ Générer la lettre de motivation", use_container_width=True, key="gen_cl")
 
