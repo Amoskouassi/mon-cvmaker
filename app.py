@@ -47,52 +47,46 @@ if SB_OK and st.session_state.sb_client is None:
     from supabase import create_client
     st.session_state.sb_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Restore auth session from URL on EVERY rerun (keeps session alive)
+sb = st.session_state.sb_client if SB_OK else None
+tok_b64 = st.query_params.get("sb_token")
+if sb and tok_b64:
+    try:
+        tok = json.loads(base64.b64decode(tok_b64).decode("utf-8"))
+        sb.auth.set_session(tok["a"], tok["r"])
+        r = sb.auth.get_user()
+        if r and r.user:
+            st.session_state.sb_user = r.user
+    except Exception:
+        st.session_state.sb_user = None
+elif sb:
+    st.session_state.sb_user = None
+
 def load_cloud():
-    sb = st.session_state.sb_client
-    u = st.session_state.sb_user
-    if not sb or not u:
+    if not sb or not st.session_state.sb_user:
         return
     try:
-        resp = sb.table("cv_texts").select("texts").eq("user_id", u.id).execute()
+        resp = sb.table("cv_texts").select("texts").eq("user_id", st.session_state.sb_user.id).execute()
         if resp.data:
             st.session_state.source_texts = resp.data[0].get("texts", [])
     except Exception:
         pass
 
 def save_cloud():
-    sb = st.session_state.sb_client
-    u = st.session_state.sb_user
-    if not sb or not u:
+    if not sb or not st.session_state.sb_user:
         return
     try:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         sb.table("cv_texts").upsert(
-            {"user_id": u.id, "texts": st.session_state.source_texts, "updated_at": now},
+            {"user_id": st.session_state.sb_user.id, "texts": st.session_state.source_texts, "updated_at": now},
             on_conflict="user_id"
         ).execute()
     except Exception:
         pass
 
-# Restore from URL on first load
-if "profiles_init" not in st.session_state:
-    tok_b64 = st.query_params.get("sb_token")
-    if tok_b64 and SB_OK:
-        try:
-            tok = json.loads(base64.b64decode(tok_b64).decode("utf-8"))
-            sb = st.session_state.sb_client
-            sb.auth.set_session(tok["a"], tok["r"])
-            r = sb.auth.get_user()
-            if r and r.user:
-                st.session_state.sb_user = r.user
-                load_cloud()
-        except Exception:
-            pass
-    st.session_state.profiles_init = True
-
 # Auto-sync from cloud on every rerun
-if st.session_state.sb_user and SB_OK:
+if sb and st.session_state.sb_user:
     try:
-        sb = st.session_state.sb_client
         resp = sb.table("cv_texts").select("texts,updated_at").eq("user_id", st.session_state.sb_user.id).execute()
         if resp.data:
             cloud = resp.data[0]
