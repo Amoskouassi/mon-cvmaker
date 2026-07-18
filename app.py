@@ -137,7 +137,7 @@ Retourne UNIQUEMENT un JSON avec cette structure :
 }}
 
 RÈGLES STRICTES :
-1. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues)
+1. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
 2. Pour les expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
 3. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
 4. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE (ex: "+30% de réussite", "encadré 15 formateurs", "formé 200 apprenants")
@@ -349,10 +349,8 @@ if st.session_state.profile:
   <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
   {{EXP_HTML}}
 
-  <div style="page-break-inside: avoid; margin-bottom: 0;">
-    <div class="section-title">FORMATION</div>
-    {{EDU_HTML}}
-  </div>
+  <div class="section-title">FORMATION</div>
+  {{EDU_HTML}}
 
   <div class="bottom-section">
     <div class="bottom-col">
