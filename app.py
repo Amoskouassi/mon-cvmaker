@@ -305,23 +305,23 @@ Retourne UNIQUEMENT un JSON avec cette structure :
     {{ "company": "", "location": "", "position": "", "start_date": "", "end_date": "", "optimized_achievements": ["Réalisation CHIFFRÉE et adaptée à l'offre", ...] }}
   ],
   "certifications": [],
-  "languages": [{{ "lang": "", "level": "" }}]
+  "languages": [{{ "lang": "", "level": "" }}],
+  "_target_company": "Nom de l'entreprise qui recrute (extrait de l'offre)"
 }}}}
 
 RÈGLES STRICTES :
 1. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
-2. Pour les expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
-3. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
-4. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE (ex: "+30% de réussite", "encadré 15 formateurs", "formé 200 apprenants")
-5. Garde les vraies expériences, n'invente RIEN
-6. Compétences techniques : max 8 au total, choisis les PLUS PERTINENTES pour l'offre
-7. Langue du CV : {lang_rule} uniquement, orthographe parfaite. AUCUN texte en langue Baoulé ou autres langues étrangères non demandées.
-8. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation"). Ne mets pas juste "Master" ou "Licence".
-9. Pour le plus haut diplôme (Master ou équivalent), ajoute une description (description) de 1-2 lignes expliquant le mémoire ou le projet principal si l'offre le requiert
-10. Les noms d'entreprises, universités et lieux doivent être en format normal (première lettre de chaque mot en majuscule), PAS en majuscules
-11. Format des dates : si le début et la fin sont dans la même année, écris "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes, écris "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Utilise les mois en français.
-12. Langues parlées : liste UNIQUEMENT les langues officielles (Français, Anglais, etc.). Supprime toute mention du Baoulé ou dialectes locaux.
-13. Réponds STRICTEMENT en JSON, sans texte avant ni après
+2. Expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
+3. Compétences : ne liste QUE les compétences techniques en lien DIRECT avec l'offre, max 8.
+4. Le "title" dans personal_info doit être SIMILAIRE ou IDENTIQUE à l'intitulé du poste dans l'offre.
+5. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
+6. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE
+7. Garde les vraies expériences, n'invente RIEN
+8. Langue du CV : {lang_rule} uniquement, orthographe parfaite. Supprime toute mention du Baoulé ou dialectes locaux.
+9. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation").
+10. Format des dates : si même année → "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes → "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Mois en français.
+11. _target_company : extrais le nom de l'entreprise depuis l'offre d'emploi.
+12. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
 CVs à fusionner :
 {combined}
@@ -377,9 +377,11 @@ if st.session_state.profile:
     with col1:
         name = st.text_input("Nom complet", value=p.get("full_name", p.get("name", "Candidat")), key="edit_name")
         email = st.text_input("Email", value=p.get("email", ""), key="edit_email")
+        poste = st.text_input("Poste visé", value=p.get("title", ""), key="edit_poste")
     with col2:
         phone = st.text_input("Téléphone", value=p.get("phone", ""), key="edit_phone")
         location = st.text_input("Localisation", value=p.get("location", ""), key="edit_location")
+        company = st.text_input("Entreprise ciblée", value=profile.get("_target_company", ""), key="edit_company")
 
     gen_pdf = st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf")
     gen_cl = st.button("✍️ Générer la lettre de motivation", use_container_width=True, key="gen_cl")
@@ -599,24 +601,20 @@ if st.session_state.profile:
             st.error("❌ Erreur g\u00e9n\u00e9ration PDF.")
             st.stop()
 
-        status.update(label="✅ CV optimis\u00e9 g\u00e9n\u00e9r\u00e9 !", state="complete", expanded=False)
+        status.update(label="✅ CV optimisé généré !", state="complete", expanded=False)
+
+        # Build filename: Nom_Prenom_Poste_Entreprise_CV.pdf
         clean_name = re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
+        clean_poste = re.sub(r'[\\/*?:"<>|]', "", poste).replace(" ", "_") if poste else ""
+        clean_company = re.sub(r'[\\/*?:"<>|]', "", company).replace(" ", "_") if company else ""
+        parts = [p for p in [clean_name, clean_poste, clean_company, "CV"] if p]
+        pdf_filename = "_".join(parts) + ".pdf"
 
         with open(out_file, "rb") as f:
-            pdf_b64 = base64.b64encode(f.read()).decode()
-        pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
-        st.markdown(
-            f'<a href="{pdf_data_uri}" target="_blank" '
-            f'style="display:block; text-align:center; padding:12px; background:#C5A059; '
-            f'color:white; text-decoration:none; border-radius:6px; font-weight:700; '
-            f'margin-bottom:12px;">&#128065; Aper\u00e7u du CV dans un nouvel onglet</a>',
-            unsafe_allow_html=True,
-        )
+            pdf_bytes = f.read()
 
-        with open(out_file, "rb") as f:
-            st.download_button("📄 T\u00e9l\u00e9charger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
-                               mime="application/pdf", use_container_width=True)
-
+        st.download_button("📄 Télécharger le CV (PDF)", data=pdf_bytes, file_name=pdf_filename,
+                           mime="application/pdf", use_container_width=True)
     # ---------- Cover Letter Generation ----------
     if gen_cl:
         cl_status = st.status("✍️ Génération de la lettre...")
@@ -669,6 +667,16 @@ Offre d'emploi :
         st.subheader("📝 Lettre de motivation")
         with st.expander("📋 Aperçu de la lettre", expanded=True):
             st.markdown(st.session_state.cover_letter)
-        st.text_area("📄 Copier le texte", st.session_state.cover_letter, height=300, key="cl_text")
+        cl_text = st.session_state.cover_letter
+        st.text_area("📄 Copier le texte", cl_text, height=300, key="cl_text")
+
+        # Build LM filename
+        cl_name = st.session_state.get("edit_name", "").replace(" ", "_")
+        cl_poste = st.session_state.get("edit_poste", "").replace(" ", "_") if st.session_state.get("edit_poste") else ""
+        cl_company = st.session_state.get("edit_company", "").replace(" ", "_") if st.session_state.get("edit_company") else ""
+        cl_parts = [p for p in [cl_name, cl_poste, cl_company, "LM"] if p]
+        cl_filename = "_".join(cl_parts) + ".txt"
+        st.download_button("📥 Télécharger la lettre (.txt)", data=cl_text.encode("utf-8"),
+                           file_name=cl_filename, use_container_width=True)
 
 
