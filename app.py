@@ -96,13 +96,11 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
     st.session_state.extracted = None
     st.session_state.cover_letter = None
 
-    progress = st.progress(0, text="📖 Extraction des CV...")
-    status = st.status("📖 Extraction des CV...", expanded=True)
+    status = st.status("📖 **Extraction des CV...**", expanded=True)
 
     all_texts = []
     for i, f in enumerate(uploaded_files):
         status.write(f"📄 {f.name} : lecture...")
-        progress.progress(int((i+1)/len(uploaded_files)*20), text=f"📖 Lecture de {f.name}...")
         doc = fitz.open(stream=f.read(), filetype="pdf")
         text = ""
         for page in doc:
@@ -120,8 +118,7 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
     if len(combined) > 25000:
         combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
 
-    progress.progress(25, text="🤖 Fusion + optimisation IA...")
-    status.write("🤖 Fusion des CV + optimisation pour l'offre...")
+    status.write("🤖 **Fusion + optimisation IA...** (1-2 min)")
 
     lang_map = {"Français": "FRANÇAIS", "English": "ENGLISH", "Español": "ESPAÑOL", "Português": "PORTUGUÊS"}
     lang_rule = lang_map.get(cv_lang, "FRANÇAIS")
@@ -164,7 +161,7 @@ Offre à cibler :
 {jd_text}"""
 
     result_json = call_ai(full_prompt, "Tu es un assistant spécialisé en CV. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après. Pas de ```json ni ```.")
-    progress.progress(70, text="📋 Analyse du résultat...")
+    status.write("📋 **Analyse du résultat...**")
     result_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", result_json, flags=re.MULTILINE).strip()
     json_match = re.search(r"\{.*\}", result_json, re.DOTALL)
     if json_match:
@@ -177,8 +174,7 @@ Offre à cibler :
         st.info("💡 Relance la génération, l'IA peut parfois mal formater.")
         st.stop()
 
-    progress.progress(100, text="✅ CV généré !")
-    progress.empty()
+    status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
