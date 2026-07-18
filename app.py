@@ -89,6 +89,21 @@ if "profiles_init" not in st.session_state:
             pass
     st.session_state.profiles_init = True
 
+# Auto-sync from cloud on every rerun
+if st.session_state.sb_user and SB_OK:
+    try:
+        sb = st.session_state.sb_client
+        resp = sb.table("cv_texts").select("texts,updated_at").eq("user_id", st.session_state.sb_user.id).execute()
+        if resp.data:
+            cloud = resp.data[0]
+            cloud_texts = cloud.get("texts", [])
+            cloud_ts = cloud.get("updated_at", "")
+            if cloud_ts != st.session_state.get("last_sync_ts", ""):
+                st.session_state.source_texts = cloud_texts
+                st.session_state.last_sync_ts = cloud_ts
+    except Exception:
+        pass
+
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("⚙️ Configuration")
