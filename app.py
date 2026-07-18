@@ -33,6 +33,8 @@ if "cover_letter" not in st.session_state:
     st.session_state.cover_letter = None
 if "source_texts" not in st.session_state:
     st.session_state.source_texts = []
+if "add_cv_key" not in st.session_state:
+    st.session_state.add_cv_key = 0
 if "sb_user" not in st.session_state:
     st.session_state.sb_user = None
 if "sb_client" not in st.session_state:
@@ -133,8 +135,9 @@ with st.sidebar:
             n = len(st.session_state.source_texts)
             st.caption(f"{n} CV source{'s' if n != 1 else ''} enregistré{'s' if n != 1 else ''}")
 
-            # Add a CV
-            extra_pdfs = st.file_uploader("Ajouter des CV (PDF)", type=["pdf"], accept_multiple_files=True, key="add_cv")
+            # Add CVs
+            add_key = st.session_state.get("add_cv_key", 0)
+            extra_pdfs = st.file_uploader("Ajouter des CV (PDF)", type=["pdf"], accept_multiple_files=True, key=f"add_cv_{add_key}")
             if extra_pdfs:
                 added = 0
                 for f in extra_pdfs:
@@ -146,7 +149,7 @@ with st.sidebar:
                         added += 1
                 if added:
                     save_cloud()
-                    st.success(f"✅ {added} CV ajouté{'s' if added > 1 else ''}")
+                    st.session_state.add_cv_key = add_key + 1
                     st.rerun()
 
             if st.session_state.source_texts:
