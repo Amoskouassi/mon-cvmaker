@@ -142,12 +142,13 @@ RÈGLES STRICTES :
 3. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
 4. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE (ex: "+30% de réussite", "encadré 15 formateurs", "formé 200 apprenants")
 5. Garde les vraies expériences, n'invente RIEN
-6. Les compétences techniques et outils doivent être exhaustifs
-7. FRANÇAIS uniquement, orthographe parfaite
+6. Compétences techniques : max 8 au total, choisis les PLUS PERTINENTES pour l'offre
+7. FRANÇAIS uniquement, orthographe parfaite. AUCUN texte en langue Baoulé ou autres langues étrangères non demandées.
 8. Pour le plus haut diplôme (Master ou équivalent), ajoute une description (description) de 1-2 lignes expliquant le mémoire ou le projet principal si l'offre le requiert
 9. Les noms d'entreprises, universités et lieux doivent être en format normal (première lettre de chaque mot en majuscule), PAS en majuscules
 10. Format des dates : si le début et la fin sont dans la même année, écris "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes, écris "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Utilise les mois en français.
-11. Réponds STRICTEMENT en JSON, sans texte avant ni après
+11. Langues parlées : liste UNIQUEMENT les langues officielles (Français, Anglais, etc.). Supprime toute mention du Baoulé ou dialectes locaux.
+12. Réponds STRICTEMENT en JSON, sans texte avant ni après
 
 CVs à fusionner :
 {combined}
