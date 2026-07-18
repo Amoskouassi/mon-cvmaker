@@ -665,14 +665,12 @@ if st.session_state.profile:
         with open(out_file, "rb") as f:
             pdf_bytes = f.read()
         pdf_b64 = base64.b64encode(pdf_bytes).decode()
-        pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
 
         st.components.v1.html(
-            f'<div style="text-align:center;">'
-            f'<a href="{pdf_data_uri}" target="_blank" '
-            f'style="display:inline-block;padding:12px 24px;background:#C5A059;'
-            f'color:white;text-decoration:none;border-radius:6px;font-weight:700;">'
-            f'👁️ Ouvrir le PDF dans un nouvel onglet</a></div>',
+            f'''<div style="text-align:center;">
+<button onclick="(function(){{var b=atob('{pdf_b64}'),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);var blob=new Blob([u],{{type:'application/pdf'}});window.open(URL.createObjectURL(blob),'_blank');}})()"
+style="padding:12px 24px;background:#C5A059;color:white;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:16px;">
+👁️ Ouvrir le PDF dans un nouvel onglet</button></div>''',
             height=60
         )
 
