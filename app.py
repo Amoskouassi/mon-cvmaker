@@ -252,7 +252,7 @@ if st.session_state.profile:
         exp_html += f"""
 <div class="row">
   <div class="date-col">
-    <div>• {date_str}</div>
+    <div>{date_str}</div>
     <div class="sub">{company_line}</div>
   </div>
   <div class="content">
@@ -274,7 +274,7 @@ if st.session_state.profile:
         edu_html += f"""
 <div class="row">
   <div class="date-col">
-    <div>• {date_str}</div>
+    <div>{date_str}</div>
     <div class="sub">{inst}</div>
   </div>
   <div class="content">
@@ -314,7 +314,7 @@ if st.session_state.profile:
   .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 15mm; }
   .name { font-size: 28px; font-weight: 700; letter-spacing: 0.15em; color: #2D2D2D; text-align: center; text-transform: uppercase; margin-bottom: 6px; }
   .title { font-size: 22px; font-weight: 300; color: #C5A059; text-align: center; margin-bottom: 20px; }
-  .contact { text-align: center; font-size: 13px; margin-bottom: 24px; }
+  .contact { text-align: center; font-size: 13px; margin-bottom: 24px; white-space: nowrap; }
   .contact span { margin: 0 12px; }
   .icon { color: #C5A059; }
   .summary { text-align: justify; line-height: 1.6; margin-bottom: 28px; }
@@ -341,13 +341,17 @@ if st.session_state.profile:
   </div>
   <div class="summary">{{SUMMARY}}</div>
 
-  <div class="section-title">PROFESSIONAL EXPERIENCE</div>
-  {{EXP_HTML}}
+  <div style="page-break-inside: avoid; margin-bottom: 28px;">
+    <div class="section-title">PROFESSIONAL EXPERIENCE</div>
+    {{EXP_HTML}}
+  </div>
 
-  <div class="section-title">EDUCATION</div>
-  {{EDU_HTML}}
+  <div style="page-break-inside: avoid; margin-bottom: 28px;">
+    <div class="section-title">EDUCATION</div>
+    {{EDU_HTML}}
+  </div>
 
-  <div class="grid-3">
+  <div class="grid-3" style="page-break-inside: avoid;">
     <div>
       <div class="section-title">LANGUES</div>
       <ul>{{LANG_LIST}}</ul>
