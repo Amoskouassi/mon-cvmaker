@@ -5,6 +5,7 @@ import io
 import re
 import os
 import json
+import base64
 import time
 from pathlib import Path
 
@@ -32,55 +33,60 @@ if "cover_letter" not in st.session_state:
     st.session_state.cover_letter = None
 if "saved_profiles" not in st.session_state:
     st.session_state.saved_profiles = []
+if "sb_user" not in st.session_state:
+    st.session_state.sb_user = None
+if "sb_client" not in st.session_state:
+    st.session_state.sb_client = None
 
-# ---------- Cloud sync (Supabase REST) ----------
+# ---------- Cloud sync (Supabase Auth) ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "") or st.secrets.get("supabase", {}).get("url", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "") or st.secrets.get("supabase", {}).get("anon_key", "")
+SB_OK = bool(SUPABASE_URL and SUPABASE_KEY)
 
-def _sb_headers():
-    return {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-    }
+if SB_OK and st.session_state.sb_client is None:
+    from supabase import create_client
+    st.session_state.sb_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def load_cloud(sync_key: str):
-    if not sync_key or not SUPABASE_URL:
+def load_cloud():
+    sb = st.session_state.sb_client
+    u = st.session_state.sb_user
+    if not sb or not u:
         return
     try:
-        resp = requests.get(
-            f"{SUPABASE_URL}/rest/v1/profiles",
-            headers=_sb_headers(),
-            params={"sync_key": f"eq.{sync_key}", "limit": "1", "order": "updated_at.desc"},
-            timeout=10,
-        )
-        if resp.ok and resp.json():
-            st.session_state.saved_profiles = resp.json()[0].get("data", [])
+        resp = sb.table("profiles").select("data").eq("user_id", u.id).execute()
+        if resp.data:
+            st.session_state.saved_profiles = resp.data[0]["data"]
     except Exception:
         pass
 
-def save_cloud(sync_key: str):
-    if not sync_key or not SUPABASE_URL:
+def save_cloud():
+    sb = st.session_state.sb_client
+    u = st.session_state.sb_user
+    if not sb or not u:
         return
     try:
-        data = st.session_state.saved_profiles
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        payload = {"sync_key": sync_key, "data": data, "updated_at": now}
-        requests.post(
-            f"{SUPABASE_URL}/rest/v1/profiles",
-            headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates"},
-            params={"on_conflict": "sync_key"},
-            json=payload,
-            timeout=10,
-        )
+        sb.table("profiles").upsert(
+            {"user_id": u.id, "data": st.session_state.saved_profiles, "updated_at": now},
+            on_conflict="user_id"
+        ).execute()
     except Exception:
         pass
 
-# Restore on first load
+# Restore from URL on first load
 if "profiles_init" not in st.session_state:
-    sk = st.query_params.get("sync_key", "")
-    if sk:
-        load_cloud(sk)
+    tok_b64 = st.query_params.get("sb_token")
+    if tok_b64 and SB_OK:
+        try:
+            tok = json.loads(base64.b64decode(tok_b64).decode("utf-8"))
+            sb = st.session_state.sb_client
+            sb.auth.set_session(tok["a"], tok["r"])
+            r = sb.auth.get_user()
+            if r and r.user:
+                st.session_state.sb_user = r.user
+                load_cloud()
+        except Exception:
+            pass
     st.session_state.profiles_init = True
 
 # ---------- Sidebar ----------
@@ -96,53 +102,93 @@ with st.sidebar:
     cv_lang = st.selectbox("🌐 Langue du CV", ["Français", "English", "Español", "Português"], index=0)
 
     st.divider()
-    st.subheader("💾 Profils sauvegardés")
 
-    # Sync key
-    sync_key = st.text_input("🔑 Clé de synchronisation",
-                             value=st.query_params.get("sync_key", ""),
-                             placeholder="ex: ma-cle-unique",
-                             help="Mets la même clé sur tous tes appareils pour synchroniser tes profils")
-    if sync_key:
-        st.query_params["sync_key"] = sync_key
-    else:
-        st.query_params.pop("sync_key", None)
+    # ---------- Auth ----------
+    sb = st.session_state.sb_client
+    sb_user = st.session_state.sb_user
 
-    # Import
-    imported_file = st.file_uploader("Importer (.json)", type="json", key="import_profiles")
-    if imported_file:
-        try:
-            data = json.loads(imported_file.read())
-            if isinstance(data, list):
-                st.session_state.saved_profiles.extend(data)
-                save_cloud(sync_key) if sync_key else None
-                st.success(f"✅ {len(data)} profils importés")
+    if SB_OK:
+        if sb_user:
+            st.success(f"✅ Connecté : **{sb_user.email}**")
+            if st.button("🚪 Déconnexion", use_container_width=True):
+                sb.auth.sign_out()
+                st.session_state.sb_user = None
+                st.session_state.saved_profiles = []
+                st.query_params.pop("sb_token", None)
                 st.rerun()
-        except Exception:
-            st.error("❌ Fichier invalide")
+        else:
+            with st.expander("🔐 Connexion / Inscription", expanded=True):
+                auth_email = st.text_input("Email", placeholder="ex: moi@email.com", key="auth_email")
+                auth_pw = st.text_input("Mot de passe (6+ car.)", type="password", key="auth_pw")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🔑 Connexion", use_container_width=True):
+                        if not auth_email or not auth_pw:
+                            st.error("❌ Remplis tous les champs")
+                        else:
+                            try:
+                                resp = sb.auth.sign_in_with_password({"email": auth_email, "password": auth_pw})
+                                if resp and resp.user:
+                                    st.session_state.sb_user = resp.user
+                                    tok = {"a": resp.session.access_token, "r": resp.session.refresh_token}
+                                    st.query_params["sb_token"] = base64.b64encode(json.dumps(tok).encode("utf-8")).decode("utf-8")
+                                    load_cloud()
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ {e}")
+                with col2:
+                    if st.button("📝 Inscription", use_container_width=True):
+                        if not auth_email or not auth_pw:
+                            st.error("❌ Remplis tous les champs")
+                        else:
+                            try:
+                                resp = sb.auth.sign_up({"email": auth_email, "password": auth_pw})
+                                if resp and resp.user:
+                                    st.success("✅ Compte créé ! Vérifie tes emails pour confirmer.")
+                                else:
+                                    st.error("❌ Erreur lors de l'inscription.")
+                            except Exception as e:
+                                st.error(f"❌ {e}")
+    else:
+        st.info("ℹ️ Cloud non configuré. Ajoute Supabase dans les Secrets.")
 
-    # Saved profiles list
-    if st.session_state.saved_profiles:
-        for idx, sp in enumerate(st.session_state.saved_profiles):
-            sp_name = sp.get("personal_info", {}).get("full_name", f"Profil {idx+1}")
-            sp_title = sp.get("personal_info", {}).get("title", "")
-            label = f"{sp_name}" + (f" — {sp_title}" if sp_title else "")
-            cols = st.columns([3, 1])
-            with cols[0]:
-                if st.button(f"📂 {label}", key=f"load_sp_{idx}", use_container_width=True):
-                    st.session_state.profile = sp
-                    st.session_state.opt_data = sp
-                    st.session_state.extracted = True
-                    st.rerun()
-            with cols[1]:
-                if st.button("🗑️", key=f"del_sp_{idx}"):
-                    st.session_state.saved_profiles.pop(idx)
-                    save_cloud(sync_key) if sync_key else None
-                    st.rerun()
+    if sb_user:
+        st.divider()
+        st.subheader("💾 Mes profils")
 
-        export_data = json.dumps(st.session_state.saved_profiles, ensure_ascii=False, indent=2).encode("utf-8")
-        st.download_button("📥 Exporter tout", data=export_data, file_name="profiles.json",
-                           mime="application/json", use_container_width=True)
+        imported_file = st.file_uploader("Importer (.json)", type="json", key="import_profiles")
+        if imported_file:
+            try:
+                data = json.loads(imported_file.read())
+                if isinstance(data, list):
+                    st.session_state.saved_profiles.extend(data)
+                    save_cloud()
+                    st.success(f"✅ {len(data)} profils importés")
+                    st.rerun()
+            except Exception:
+                st.error("❌ Fichier invalide")
+
+        if st.session_state.saved_profiles:
+            for idx, sp in enumerate(st.session_state.saved_profiles):
+                sp_name = sp.get("personal_info", {}).get("full_name", f"Profil {idx+1}")
+                sp_title = sp.get("personal_info", {}).get("title", "")
+                label = f"{sp_name}" + (f" — {sp_title}" if sp_title else "")
+                cols = st.columns([3, 1])
+                with cols[0]:
+                    if st.button(f"📂 {label}", key=f"load_sp_{idx}", use_container_width=True):
+                        st.session_state.profile = sp
+                        st.session_state.opt_data = sp
+                        st.session_state.extracted = True
+                        st.rerun()
+                with cols[1]:
+                    if st.button("🗑️", key=f"del_sp_{idx}"):
+                        st.session_state.saved_profiles.pop(idx)
+                        save_cloud()
+                        st.rerun()
+
+            export_data = json.dumps(st.session_state.saved_profiles, ensure_ascii=False, indent=2).encode("utf-8")
+            st.download_button("📥 Exporter tout", data=export_data, file_name="profiles.json",
+                               mime="application/json", use_container_width=True)
 
 
 # ---------- AI Call ----------
@@ -286,9 +332,7 @@ Offre à cibler :
     )
     if name_key and not exists:
         st.session_state.saved_profiles.append(profile)
-        sync_key = st.query_params.get("sync_key", "")
-        if sync_key:
-            save_cloud(sync_key)
+        save_cloud()
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
