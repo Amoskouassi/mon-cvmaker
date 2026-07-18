@@ -398,8 +398,8 @@ if st.session_state.profile:
     is_linux = sys.platform.startswith("linux")
 
     if is_linux:
-        from weasyprint import HTML
-        HTML(string=html).write_pdf(out_file)
+        import pdfkit
+        pdfkit.from_string(html, str(out_file))
     else:
         # Windows: use Edge headless
         edge_candidates = [
