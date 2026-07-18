@@ -252,7 +252,7 @@ if st.session_state.profile:
         exp_html += f"""
 <div class="row">
   <div class="date-col">
-    <div>{date_str}</div>
+    <div>• {date_str}</div>
     <div class="sub">{company_line}</div>
   </div>
   <div class="content">
@@ -274,7 +274,7 @@ if st.session_state.profile:
         edu_html += f"""
 <div class="row">
   <div class="date-col">
-    <div>{date_str}</div>
+    <div>• {date_str}</div>
     <div class="sub">{inst}</div>
   </div>
   <div class="content">
@@ -341,17 +341,13 @@ if st.session_state.profile:
   </div>
   <div class="summary">{{SUMMARY}}</div>
 
-  <div style="page-break-inside: avoid; margin-bottom: 28px;">
-    <div class="section-title">PROFESSIONAL EXPERIENCE</div>
-    {{EXP_HTML}}
-  </div>
+  <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
+  {{EXP_HTML}}
 
-  <div style="page-break-inside: avoid; margin-bottom: 28px;">
-    <div class="section-title">EDUCATION</div>
-    {{EDU_HTML}}
-  </div>
+  <div class="section-title">FORMATION</div>
+  {{EDU_HTML}}
 
-  <div class="grid-3" style="page-break-inside: avoid;">
+  <div class="grid-3">
     <div>
       <div class="section-title">LANGUES</div>
       <ul>{{LANG_LIST}}</ul>
