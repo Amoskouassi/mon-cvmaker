@@ -272,6 +272,7 @@ if st.session_state.profile:
         date_str = fmt_date(sd, ed)
         desc = edu.get("description", "")
         desc_html = f'<div class="desc">{esc_html(desc)}</div>' if desc else ""
+        deg_html = f'<h3>{deg}</h3>' if deg else ""
         edu_html += f"""
 <div class="row">
   <div class="date-col">
@@ -279,7 +280,7 @@ if st.session_state.profile:
     <div class="sub">{inst}</div>
   </div>
   <div class="content">
-    <h3>{deg}</h3>
+    {deg_html}
     {desc_html}
   </div>
 </div>"""
@@ -300,6 +301,7 @@ if st.session_state.profile:
     if not lang_list: lang_list = ["<li>Français : Natif</li>"]
     if not tool_list: tool_list = ["<li>Suite MS Office</li>"]
     if not skill_list: skill_list = ["<li>Pédagogie</li>"]
+    skill_list = skill_list[:8]  # max 8 compétences
 
     # Full HTML template (pure CSS, no Tailwind CDN — works with weasyprint)
     _html_tpl = r"""<!DOCTYPE html>
@@ -328,7 +330,8 @@ if st.session_state.profile:
   .content .desc { font-size: 12px; color: #666; margin-top: 4px; }
   ul { list-style: disc; padding-left: 18px; }
   li { margin-bottom: 3px; line-height: 1.4; }
-  .grid-3 { display: grid; grid-template-columns: 3fr 5fr 4fr; gap: 28px; }
+  .bottom-section { display: flex; gap: 28px; page-break-inside: avoid; }
+  .bottom-col { flex: 1; }
 </style>
 </head>
 <body>
@@ -348,16 +351,16 @@ if st.session_state.profile:
   <div class="section-title">FORMATION</div>
   {{EDU_HTML}}
 
-  <div class="grid-3">
-    <div>
+  <div class="bottom-section">
+    <div class="bottom-col">
       <div class="section-title">LANGUES</div>
       <ul>{{LANG_LIST}}</ul>
     </div>
-    <div>
+    <div class="bottom-col">
       <div class="section-title">COMP&#201;TENCES</div>
       <ul>{{SKILL_LIST}}</ul>
     </div>
-    <div>
+    <div class="bottom-col">
       <div class="section-title">OUTILS</div>
       <ul>{{TOOL_LIST}}</ul>
     </div>
