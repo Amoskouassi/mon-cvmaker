@@ -212,8 +212,10 @@ if st.session_state.profile:
 
     summary = opt_data.get("summary", profile.get("summary", ""))
     skills = opt_data.get("skills", profile.get("skills", {}))
-    experience = opt_data.get("experience", profile.get("experience", []))
-    education = profile.get("education", [])
+    experience = sorted(opt_data.get("experience", profile.get("experience", [])),
+                        key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
+    education = sorted(profile.get("education", []),
+                       key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
     languages = profile.get("languages", [])
 
     # ── Build HTML from template ──
@@ -312,10 +314,10 @@ if st.session_state.profile:
 <title>CV - {{NAME}}</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet"/>
 <style>
-  @page { size: A4; margin: 0; }
+  @page { size: A4; margin: 15mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Montserrat', sans-serif; font-size: 13px; color: #757575; background: white; }
-  .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 15mm; }
+  .page { width: 100%; min-height: 297mm; }
   .name { font-size: 28px; font-weight: 700; letter-spacing: 0.15em; color: #2D2D2D; text-align: center; text-transform: uppercase; margin-bottom: 6px; }
   .title { font-size: 22px; font-weight: 300; color: #C5A059; text-align: center; margin-bottom: 20px; }
   .contact { text-align: center; font-size: 13px; margin-bottom: 24px; white-space: nowrap; }
@@ -331,7 +333,7 @@ if st.session_state.profile:
   .content .desc { font-size: 12px; color: #666; margin-top: 4px; }
   ul { list-style: disc; padding-left: 18px; }
   li { margin-bottom: 3px; line-height: 1.4; }
-  .bottom-section { display: flex; gap: 28px; page-break-inside: avoid; }
+  .bottom-section { display: flex; gap: 28px; page-break-inside: avoid; margin-top: 8mm; }
   .bottom-col { flex: 1; }
 </style>
 </head>
