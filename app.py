@@ -18,7 +18,7 @@ if _env_file.exists():
 
 st.set_page_config(page_title="CV Optimizer IA", layout="centered")
 st.title("📄 CV Optimizer IA")
-st.info("🤖 Importe **plusieurs CV** → L'IA les fusionne → Colle une offre → **1 CV optimisé**")
+st.info("📁 **Tes CV** sont sauvegardés dans le cloud → colle une offre → **1 CV optimisé par IA**")
 
 # ---------- Session state ----------
 if "profile" not in st.session_state:
@@ -31,8 +31,6 @@ if "jd_text" not in st.session_state:
     st.session_state.jd_text = None
 if "cover_letter" not in st.session_state:
     st.session_state.cover_letter = None
-if "saved_profiles" not in st.session_state:
-    st.session_state.saved_profiles = []
 if "source_texts" not in st.session_state:
     st.session_state.source_texts = []
 if "sb_user" not in st.session_state:
@@ -55,15 +53,9 @@ def load_cloud():
     if not sb or not u:
         return
     try:
-        resp = sb.table("profiles").select("data").eq("user_id", u.id).execute()
+        resp = sb.table("cv_texts").select("texts").eq("user_id", u.id).execute()
         if resp.data:
-            cloud_profiles = resp.data[0]["data"]
-            # Merge: keep local ones not yet in cloud, add cloud ones not yet local
-            cloud_names = {p.get("personal_info", {}).get("full_name", "") for p in cloud_profiles}
-            local_extra = [p for p in st.session_state.saved_profiles
-                           if p.get("personal_info", {}).get("full_name", "") not in cloud_names]
-            st.session_state.saved_profiles = cloud_profiles + local_extra
-            save_cloud()  # persist merged result
+            st.session_state.source_texts = resp.data[0].get("texts", [])
     except Exception:
         pass
 
@@ -74,8 +66,8 @@ def save_cloud():
         return
     try:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        sb.table("profiles").upsert(
-            {"user_id": u.id, "data": st.session_state.saved_profiles, "updated_at": now},
+        sb.table("cv_texts").upsert(
+            {"user_id": u.id, "texts": st.session_state.source_texts, "updated_at": now},
             on_conflict="user_id"
         ).execute()
     except Exception:
@@ -121,9 +113,47 @@ with st.sidebar:
             if st.button("🚪 Déconnexion", use_container_width=True):
                 sb.auth.sign_out()
                 st.session_state.sb_user = None
-                st.session_state.saved_profiles = []
+                st.session_state.source_texts = []
                 st.query_params.pop("sb_token", None)
                 st.rerun()
+
+            st.divider()
+            st.subheader("📄 Mes CV sources")
+
+            # Status
+            n = len(st.session_state.source_texts)
+            st.caption(f"{n} CV source{'s' if n != 1 else ''} enregistré{'s' if n != 1 else ''}")
+
+            # Add a CV
+            extra_pdf = st.file_uploader("Ajouter un CV (PDF)", type=["pdf"], key="add_cv")
+            if extra_pdf:
+                doc = fitz.open(stream=extra_pdf.read(), filetype="pdf")
+                text = "".join(page.get_text() for page in doc)
+                doc.close()
+                if text.strip():
+                    st.session_state.source_texts.append(f"--- {extra_pdf.name} ---\n{text.strip()}")
+                    save_cloud()
+                    st.success(f"✅ {extra_pdf.name} ajouté")
+                    st.rerun()
+                else:
+                    st.error("❌ Texte vide")
+
+            if st.session_state.source_texts:
+                for idx, txt in enumerate(st.session_state.source_texts):
+                    name = txt.split("\n")[0].replace("--- ", "").replace(" ---", "").strip()
+                    cols = st.columns([4, 1])
+                    with cols[0]:
+                        st.text(f"📄 {name or f'CV {idx+1}'}")
+                    with cols[1]:
+                        if st.button("✕", key=f"del_txt_{idx}"):
+                            st.session_state.source_texts.pop(idx)
+                            save_cloud()
+                            st.rerun()
+
+                if st.button("🗑️ Tout vider", use_container_width=True):
+                    st.session_state.source_texts = []
+                    save_cloud()
+                    st.rerun()
         else:
             with st.expander("🔐 Connexion / Inscription", expanded=True):
                 auth_email = st.text_input("Email", placeholder="ex: moi@email.com", key="auth_email")
@@ -159,45 +189,6 @@ with st.sidebar:
                                 st.error(f"❌ {e}")
     else:
         st.info("ℹ️ Cloud non configuré. Ajoute Supabase dans les Secrets.")
-
-    if sb_user:
-        st.divider()
-        st.subheader("💾 Mes profils")
-
-        imported_file = st.file_uploader("Importer (.json)", type="json", key="import_profiles")
-        if imported_file:
-            try:
-                data = json.loads(imported_file.read())
-                if isinstance(data, list):
-                    st.session_state.saved_profiles.extend(data)
-                    save_cloud()
-                    st.success(f"✅ {len(data)} profils importés")
-                    st.rerun()
-            except Exception:
-                st.error("❌ Fichier invalide")
-
-        if st.session_state.saved_profiles:
-            for idx, sp in enumerate(st.session_state.saved_profiles):
-                sp_name = sp.get("personal_info", {}).get("full_name", f"Profil {idx+1}")
-                sp_title = sp.get("personal_info", {}).get("title", "")
-                label = f"{sp_name}" + (f" — {sp_title}" if sp_title else "")
-                cols = st.columns([3, 1])
-                with cols[0]:
-                    if st.button(f"📂 {label}", key=f"load_sp_{idx}", use_container_width=True):
-                        st.session_state.profile = sp
-                        st.session_state.opt_data = sp
-                        st.session_state.extracted = True
-                        st.session_state.source_texts = sp.get("_source_texts", [])
-                        st.rerun()
-                with cols[1]:
-                    if st.button("🗑️", key=f"del_sp_{idx}"):
-                        st.session_state.saved_profiles.pop(idx)
-                        save_cloud()
-                        st.rerun()
-
-            export_data = json.dumps(st.session_state.saved_profiles, ensure_ascii=False, indent=2).encode("utf-8")
-            st.download_button("📥 Exporter tout", data=export_data, file_name="profiles.json",
-                               mime="application/json", use_container_width=True)
 
 
 # ---------- AI Call ----------
@@ -344,16 +335,7 @@ Offre à cibler :
 
     status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
 
-    # Auto-save to profile database
-    name_key = profile.get("personal_info", {}).get("full_name", profile.get("name", ""))
-    exists = any(
-        sp.get("personal_info", {}).get("full_name", "") == name_key
-        for sp in st.session_state.saved_profiles
-    )
-    if name_key and not exists:
-        profile["_source_texts"] = st.session_state.source_texts
-        st.session_state.saved_profiles.append(profile)
-        save_cloud()
+    save_cloud()
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
