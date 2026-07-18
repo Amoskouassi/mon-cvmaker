@@ -125,18 +125,20 @@ with st.sidebar:
             st.caption(f"{n} CV source{'s' if n != 1 else ''} enregistré{'s' if n != 1 else ''}")
 
             # Add a CV
-            extra_pdf = st.file_uploader("Ajouter un CV (PDF)", type=["pdf"], key="add_cv")
-            if extra_pdf:
-                doc = fitz.open(stream=extra_pdf.read(), filetype="pdf")
-                text = "".join(page.get_text() for page in doc)
-                doc.close()
-                if text.strip():
-                    st.session_state.source_texts.append(f"--- {extra_pdf.name} ---\n{text.strip()}")
+            extra_pdfs = st.file_uploader("Ajouter des CV (PDF)", type=["pdf"], accept_multiple_files=True, key="add_cv")
+            if extra_pdfs:
+                added = 0
+                for f in extra_pdfs:
+                    doc = fitz.open(stream=f.read(), filetype="pdf")
+                    text = "".join(page.get_text() for page in doc)
+                    doc.close()
+                    if text.strip():
+                        st.session_state.source_texts.append(f"--- {f.name} ---\n{text.strip()}")
+                        added += 1
+                if added:
                     save_cloud()
-                    st.success(f"✅ {extra_pdf.name} ajouté")
+                    st.success(f"✅ {added} CV ajouté{'s' if added > 1 else ''}")
                     st.rerun()
-                else:
-                    st.error("❌ Texte vide")
 
             if st.session_state.source_texts:
                 for idx, txt in enumerate(st.session_state.source_texts):
