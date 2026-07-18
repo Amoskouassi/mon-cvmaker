@@ -219,57 +219,51 @@ if st.session_state.profile:
     # ---------- PDF Generation ----------
     if gen_pdf:
         status = st.status("📝 Génération du PDF...")
+        import tempfile, os, subprocess, sys, base64
+        from pathlib import Path
 
-    import tempfile, os, subprocess, sys, base64
-    from pathlib import Path
+        summary = opt_data.get("summary", profile.get("summary", ""))
+        skills = opt_data.get("skills", profile.get("skills", {}))
+        experience = sorted(opt_data.get("experience", profile.get("experience", [])),
+                            key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
+        education = sorted(profile.get("education", []),
+                           key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
+        languages = profile.get("languages", [])
 
-    summary = opt_data.get("summary", profile.get("summary", ""))
-    skills = opt_data.get("skills", profile.get("skills", {}))
-    experience = sorted(opt_data.get("experience", profile.get("experience", [])),
-                        key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
-    education = sorted(profile.get("education", []),
-                       key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
-    languages = profile.get("languages", [])
+        def esc_html(t):
+            if not t: return ""
+            return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
 
-    # ── Build HTML from template ──
-    def esc_html(t):
-        if not t: return ""
-        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
+        def fmt_date(start, end):
+            if not start and not end: return ""
+            if not start: return esc_html(end or "")
+            if not end: return esc_html(start)
+            import re
+            sy = re.search(r"(\d{4})", start)
+            ey = re.search(r"(\d{4})", end)
+            if sy and ey and sy.group(1) == ey.group(1):
+                start_clean = re.sub(r"\s*\d{4}", "", start).strip()
+                return f"{esc_html(start_clean)} - {esc_html(end)}"
+            return f"{esc_html(start)} - {esc_html(end)}"
 
-    def fmt_date(start, end):
-        """Format dates: merge year if same (Janvier - Décembre 2020)"""
-        if not start and not end: return ""
-        if not start: return esc_html(end or "")
-        if not end: return esc_html(start)
-        import re
-        sy = re.search(r"(\d{4})", start)
-        ey = re.search(r"(\d{4})", end)
-        if sy and ey and sy.group(1) == ey.group(1):
-            start_clean = re.sub(r"\s*\d{4}", "", start).strip()
-            return f"{esc_html(start_clean)} - {esc_html(end)}"
-        return f"{esc_html(start)} - {esc_html(end)}"
+        title_text = profile.get("personal_info", {}).get("title", "") or opt_data.get("title", "")
 
-    title_text = profile.get("personal_info", {}).get("title", "") or opt_data.get("title", "")
-
-    # Experience HTML
-    exp_html = ""
-    for i, exp in enumerate(experience):
-        pos = esc_html(exp.get("position", ""))
-        co = esc_html(exp.get("company", ""))
-        sd = exp.get("start_date", "")
-        ed = exp.get("end_date", "")
-        date_str = fmt_date(sd, ed)
-        company_location = exp.get("location", "")
-        company_line = f"{co} – {esc_html(company_location)}" if company_location else co
-
-        bullets = ""
-        for ach in exp.get("optimized_achievements", exp.get("achievements", [])):
-            bullets += f'<li>{esc_html(ach)}</li>\n'
-
-        exp_html += f"""
-<div class="row">
+        # Experience HTML
+        exp_html = ""
+        for i, exp in enumerate(experience):
+            pos = esc_html(exp.get("position", ""))
+            co = esc_html(exp.get("company", ""))
+            sd = exp.get("start_date", "")
+            ed = exp.get("end_date", "")
+            date_str = fmt_date(sd, ed)
+            company_location = exp.get("location", "")
+            company_line = f"{co} – {esc_html(company_location)}" if company_location else co
+            bullets = ""
+            for ach in exp.get("optimized_achievements", exp.get("achievements", [])):
+                bullets += f'<li>{esc_html(ach)}</li>\n'
+            exp_html += f"""<div class="row">
   <div class="date-col">
-    <div>• {date_str}</div>
+    <div>\u2022 {date_str}</div>
     <div class="sub">{company_line}</div>
   </div>
   <div class="content">
@@ -278,21 +272,20 @@ if st.session_state.profile:
   </div>
 </div>"""
 
-    # Education HTML
-    edu_html = ""
-    for edu in education:
-        deg = esc_html(edu.get("degree", ""))
-        inst = esc_html(edu.get("institution", ""))
-        sd = edu.get("start_date", "")
-        ed = edu.get("end_date", "")
-        date_str = fmt_date(sd, ed)
-        desc = edu.get("description", "")
-        desc_html = f'<div class="desc">{esc_html(desc)}</div>' if desc else ""
-        deg_html = f'<h3>{deg}</h3>' if deg else ""
-        edu_html += f"""
-<div class="row">
+        # Education HTML
+        edu_html = ""
+        for edu in education:
+            deg = esc_html(edu.get("degree", ""))
+            inst = esc_html(edu.get("institution", ""))
+            sd = edu.get("start_date", "")
+            ed = edu.get("end_date", "")
+            date_str = fmt_date(sd, ed)
+            desc = edu.get("description", "")
+            desc_html = f'<div class="desc">{esc_html(desc)}</div>' if desc else ""
+            deg_html = f'<h3>{deg}</h3>' if deg else ""
+            edu_html += f"""<div class="row">
   <div class="date-col">
-    <div>• {date_str}</div>
+    <div>\u2022 {date_str}</div>
     <div class="sub">{inst}</div>
   </div>
   <div class="content">
@@ -301,36 +294,36 @@ if st.session_state.profile:
   </div>
 </div>"""
 
-    # Skills / Languages / Tools
-    tool_cats = {"Outils", "Tools", "Technologies", "Logiciels", "Outils Numériques"}
-    lang_list = [f"<li>{esc_html(l.get('lang',''))} : {esc_html(l.get('level',''))}</li>" for l in languages]
-    tool_list = []
-    skill_list = []
-    for cat, items in skills.items():
-        if items:
-            if cat in tool_cats:
-                tool_list.extend(f"<li>{esc_html(it)}</li>" for it in items)
-            else:
-                for it in items:
-                    skill_list.append(f"<li>{esc_html(it)}</li>")
+        # Skills / Languages / Tools
+        tool_cats = {"Outils", "Tools", "Technologies", "Logiciels", "Outils Numériques"}
+        lang_list = [f"<li>{esc_html(l.get('lang',''))} : {esc_html(l.get('level',''))}</li>" for l in languages]
+        tool_list = []
+        skill_list = []
+        for cat, items in skills.items():
+            if items:
+                if cat in tool_cats:
+                    tool_list.extend(f"<li>{esc_html(it)}</li>" for it in items)
+                else:
+                    for it in items:
+                        skill_list.append(f"<li>{esc_html(it)}</li>")
+        if not lang_list: lang_list = ["<li>Fran\u00e7ais : Natif</li>"]
+        if not tool_list: tool_list = ["<li>Suite MS Office</li>"]
+        if not skill_list: skill_list = ["<li>P\u00e9dagogie</li>"]
+        skill_list = skill_list[:8]
 
-    if not lang_list: lang_list = ["<li>Français : Natif</li>"]
-    if not tool_list: tool_list = ["<li>Suite MS Office</li>"]
-    if not skill_list: skill_list = ["<li>Pédagogie</li>"]
-    skill_list = skill_list[:8]  # max 8 compétences
+        # Section titles by language
+        lang_tpl = st.session_state.get("cv_lang", "Fran\u00e7ais")
+        if lang_tpl == "English":
+            sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "PROFESSIONAL EXPERIENCE", "EDUCATION", "LANGUAGES", "SKILLS", "TOOLS"
+        elif lang_tpl == "Espa\u00f1ol":
+            sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERIENCIA PROFESIONAL", "FORMACI\u00d3N", "IDIOMAS", "COMPETENCIAS", "HERRAMIENTAS"
+        elif lang_tpl == "Portugu\u00eas":
+            sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERI\u00caNCIA PROFISSIONAL", "FORMA\u00c7\u00c3O", "IDIOMAS", "COMPET\u00caNCIAS", "FERRAMENTAS"
+        else:
+            sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXP\u00c9RIENCES PROFESSIONNELLES", "FORMATION", "LANGUES", "COMP\u00c9TENCES", "OUTILS"
 
-    # Full HTML template (pure CSS, no Tailwind CDN — works with weasyprint)
-    lang_tpl = st.session_state.get("cv_lang", "Français")
-    if lang_tpl == "English":
-        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "PROFESSIONAL EXPERIENCE", "EDUCATION", "LANGUAGES", "SKILLS", "TOOLS"
-    elif lang_tpl == "Español":
-        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERIENCIA PROFESIONAL", "FORMACIÓN", "IDIOMAS", "COMPETENCIAS", "HERRAMIENTAS"
-    elif lang_tpl == "Português":
-        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERIÊNCIA PROFISSIONAL", "FORMAÇÃO", "IDIOMAS", "COMPETÊNCIAS", "FERRAMENTAS"
-    else:
-        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPÉRIENCES PROFESSIONNELLES", "FORMATION", "LANGUES", "COMPÉTENCES", "OUTILS"
-
-    _html_tpl = r"""<!DOCTYPE html>
+        # Build HTML
+        _html_tpl = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8"/>
@@ -371,14 +364,11 @@ if st.session_state.profile:
       <span><span class="icon">&#9782;</span> {{LOCATION}}</span>
     </div>
     <div class="summary">{{SUMMARY}}</div>
-
     <div class="section-title">{{SEC_EXP}}</div>
     {{EXP_HTML}}
-
     <div class="section-title">{{SEC_EDU}}</div>
     {{EDU_HTML}}
   </div>
-
   <div class="bottom-section">
     <div class="bottom-col">
       <div class="section-title">{{SEC_LANG}}</div>
@@ -396,72 +386,69 @@ if st.session_state.profile:
 </div>
 </body>
 </html>"""
-    html = (_html_tpl.replace("{{NAME}}", esc_html(name.upper()))
-            .replace("{{TITLE}}", esc_html(title_text))
-            .replace("{{EMAIL}}", esc_html(email))
-            .replace("{{PHONE}}", esc_html(phone))
-            .replace("{{LOCATION}}", esc_html(location))
-            .replace("{{SUMMARY}}", esc_html(summary))
-            .replace("{{SEC_EXP}}", sec_exp)
-            .replace("{{SEC_EDU}}", sec_edu)
-            .replace("{{SEC_LANG}}", sec_lang)
-            .replace("{{SEC_SKILLS}}", sec_skills)
-            .replace("{{SEC_TOOLS}}", sec_tools)
-            .replace("{{EXP_HTML}}", exp_html)
-            .replace("{{EDU_HTML}}", edu_html)
-            .replace("{{LANG_LIST}}", "".join(lang_list))
-            .replace("{{SKILL_LIST}}", "".join(skill_list))
-            .replace("{{TOOL_LIST}}", "".join(tool_list)))
 
-    # ── Preview & PDF ──
-    status.write("🖨️ Génération du PDF...")
-    out_file = Path(tempfile.mktemp(suffix=".pdf"))
+        html = (_html_tpl.replace("{{NAME}}", esc_html(name.upper()))
+                .replace("{{TITLE}}", esc_html(title_text))
+                .replace("{{EMAIL}}", esc_html(email))
+                .replace("{{PHONE}}", esc_html(phone))
+                .replace("{{LOCATION}}", esc_html(location))
+                .replace("{{SUMMARY}}", esc_html(summary))
+                .replace("{{SEC_EXP}}", sec_exp)
+                .replace("{{SEC_EDU}}", sec_edu)
+                .replace("{{SEC_LANG}}", sec_lang)
+                .replace("{{SEC_SKILLS}}", sec_skills)
+                .replace("{{SEC_TOOLS}}", sec_tools)
+                .replace("{{EXP_HTML}}", exp_html)
+                .replace("{{EDU_HTML}}", edu_html)
+                .replace("{{LANG_LIST}}", "".join(lang_list))
+                .replace("{{SKILL_LIST}}", "".join(skill_list))
+                .replace("{{TOOL_LIST}}", "".join(tool_list)))
 
-    is_linux = sys.platform.startswith("linux")
+        status.write("\U0001f5a8 G\u00e9n\u00e9ration du PDF...")
+        out_file = Path(tempfile.mktemp(suffix=".pdf"))
 
-    if is_linux:
-        from weasyprint import HTML
-        HTML(string=html).write_pdf(out_file)
-    else:
-        # Windows: use Edge headless
-        edge_candidates = [
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        ]
-        edge = next((e for e in edge_candidates if os.path.exists(e)), None)
-        if not edge:
-            st.error("❌ Aucun navigateur Edge ou Chromium trouvé pour la génération PDF.")
+        is_linux = sys.platform.startswith("linux")
+        if is_linux:
+            from weasyprint import HTML
+            HTML(string=html).write_pdf(out_file)
+        else:
+            edge_candidates = [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            ]
+            edge = next((e for e in edge_candidates if os.path.exists(e)), None)
+            if not edge:
+                st.error("❌ Aucun navigateur Edge ou Chromium trouv\u00e9 pour la g\u00e9n\u00e9ration PDF.")
+                st.stop()
+            html_path = Path(tempfile.mktemp(suffix=".html"))
+            html_path.write_text(html, encoding="utf-8")
+            subprocess.run(
+                [edge, "--headless", f"--print-to-pdf={out_file}", "--disable-gpu",
+                 "--no-first-run", f"file:///{html_path.as_posix()}"],
+                capture_output=True, timeout=60,
+            )
+
+        if not out_file.exists():
+            st.error("❌ Erreur g\u00e9n\u00e9ration PDF.")
             st.stop()
-        html_path = Path(tempfile.mktemp(suffix=".html"))
-        html_path.write_text(html, encoding="utf-8")
-        subprocess.run(
-            [edge, "--headless", f"--print-to-pdf={out_file}", "--disable-gpu",
-             "--no-first-run", f"file:///{html_path.as_posix()}"],
-            capture_output=True, timeout=60,
+
+        status.update(label="✅ CV optimis\u00e9 g\u00e9n\u00e9r\u00e9 !", state="complete", expanded=False)
+        clean_name = re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
+
+        with open(out_file, "rb") as f:
+            pdf_b64 = base64.b64encode(f.read()).decode()
+        pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
+        st.markdown(
+            f'<a href="{pdf_data_uri}" target="_blank" '
+            f'style="display:block; text-align:center; padding:12px; background:#C5A059; '
+            f'color:white; text-decoration:none; border-radius:6px; font-weight:700; '
+            f'margin-bottom:12px;">&#128065; Aper\u00e7u du CV dans un nouvel onglet</a>',
+            unsafe_allow_html=True,
         )
 
-    if not out_file.exists():
-        st.error("❌ Erreur génération PDF.")
-        st.stop()
-
-    status.update(label="✅ CV optimisé généré !", state="complete", expanded=False)
-    clean_name = re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
-
-    # PDF preview via base64 data URI
-    with open(out_file, "rb") as f:
-        pdf_b64 = base64.b64encode(f.read()).decode()
-    pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
-    st.markdown(
-        f'<a href="{pdf_data_uri}" target="_blank" '
-        f'style="display:block; text-align:center; padding:12px; background:#C5A059; '
-        f'color:white; text-decoration:none; border-radius:6px; font-weight:700; '
-        f'margin-bottom:12px;">&#128065; Aperçu du CV dans un nouvel onglet</a>',
-        unsafe_allow_html=True,
-    )
-
-    with open(out_file, "rb") as f:
-        st.download_button("📄 Télécharger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
-                           mime="application/pdf", use_container_width=True)
+        with open(out_file, "rb") as f:
+            st.download_button("📄 T\u00e9l\u00e9charger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
+                               mime="application/pdf", use_container_width=True)
 
     # ---------- Cover Letter Generation ----------
     if gen_cl:
