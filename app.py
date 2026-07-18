@@ -351,9 +351,7 @@ if st.session_state.profile:
   <div style="page-break-inside: avoid;">
     <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
     {{EXP_HTML}}
-  </div>
 
-  <div style="page-break-inside: avoid;">
     <div class="section-title">FORMATION</div>
     {{EDU_HTML}}
   </div>
