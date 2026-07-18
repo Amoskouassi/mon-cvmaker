@@ -144,11 +144,12 @@ RÈGLES STRICTES :
 5. Garde les vraies expériences, n'invente RIEN
 6. Compétences techniques : max 8 au total, choisis les PLUS PERTINENTES pour l'offre
 7. FRANÇAIS uniquement, orthographe parfaite. AUCUN texte en langue Baoulé ou autres langues étrangères non demandées.
-8. Pour le plus haut diplôme (Master ou équivalent), ajoute une description (description) de 1-2 lignes expliquant le mémoire ou le projet principal si l'offre le requiert
-9. Les noms d'entreprises, universités et lieux doivent être en format normal (première lettre de chaque mot en majuscule), PAS en majuscules
-10. Format des dates : si le début et la fin sont dans la même année, écris "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes, écris "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Utilise les mois en français.
-11. Langues parlées : liste UNIQUEMENT les langues officielles (Français, Anglais, etc.). Supprime toute mention du Baoulé ou dialectes locaux.
-12. Réponds STRICTEMENT en JSON, sans texte avant ni après
+8. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation"). Ne mets pas juste "Master" ou "Licence".
+9. Pour le plus haut diplôme (Master ou équivalent), ajoute une description (description) de 1-2 lignes expliquant le mémoire ou le projet principal si l'offre le requiert
+10. Les noms d'entreprises, universités et lieux doivent être en format normal (première lettre de chaque mot en majuscule), PAS en majuscules
+11. Format des dates : si le début et la fin sont dans la même année, écris "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes, écris "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Utilise les mois en français.
+12. Langues parlées : liste UNIQUEMENT les langues officielles (Français, Anglais, etc.). Supprime toute mention du Baoulé ou dialectes locaux.
+13. Réponds STRICTEMENT en JSON, sans texte avant ni après
 
 CVs à fusionner :
 {combined}
@@ -348,8 +349,10 @@ if st.session_state.profile:
   <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
   {{EXP_HTML}}
 
-  <div class="section-title">FORMATION</div>
-  {{EDU_HTML}}
+  <div style="page-break-inside: avoid; margin-bottom: 0;">
+    <div class="section-title">FORMATION</div>
+    {{EDU_HTML}}
+  </div>
 
   <div class="bottom-section">
     <div class="bottom-col">
