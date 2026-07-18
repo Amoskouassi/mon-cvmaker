@@ -33,6 +33,8 @@ if "cover_letter" not in st.session_state:
     st.session_state.cover_letter = None
 if "saved_profiles" not in st.session_state:
     st.session_state.saved_profiles = []
+if "source_texts" not in st.session_state:
+    st.session_state.source_texts = []
 if "sb_user" not in st.session_state:
     st.session_state.sb_user = None
 if "sb_client" not in st.session_state:
@@ -185,6 +187,7 @@ with st.sidebar:
                         st.session_state.profile = sp
                         st.session_state.opt_data = sp
                         st.session_state.extracted = True
+                        st.session_state.source_texts = sp.get("_source_texts", [])
                         st.rerun()
                 with cols[1]:
                     if st.button("🗑️", key=f"del_sp_{idx}"):
@@ -234,14 +237,24 @@ def call_ai(prompt: str, system: str = "") -> str:
 
 
 # ---------- UI ----------
-uploaded_files = st.file_uploader("📤 Importer plusieurs CV (PDF)", type=["pdf"], accept_multiple_files=True)
+has_stored = len(st.session_state.source_texts) > 0
+uploaded_files = st.file_uploader(
+    "📤 Importer plusieurs CV (PDF)" + (" — ou laisse vide pour utiliser les CV sauvegardés" if has_stored else ""),
+    type=["pdf"], accept_multiple_files=True)
 jd_text = st.text_area("📋 Coller l'offre d'emploi", height=150,
                        placeholder="Colle ici le texte complet de l'offre...")
 
+gen_label = "🚀 Générer mon CV optimisé"
+if has_stored and not uploaded_files:
+    gen_label = "🚀 Regénérer avec nouvelle offre (CV sauvegardés)"
+
 # ---------- Extract & Optimize ----------
-if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_width=True):
-    if not uploaded_files or not jd_text.strip():
-        st.warning("⚠️ Importe au moins un CV ET colle une offre.")
+if st.button(gen_label, type="primary", use_container_width=True):
+    if not jd_text.strip():
+        st.warning("⚠️ Colle une offre d'emploi.")
+        st.stop()
+    if not uploaded_files and not has_stored:
+        st.warning("⚠️ Importe au moins un CV OU charge un profil sauvegardé.")
         st.stop()
 
     st.session_state.profile = None
@@ -251,8 +264,8 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
 
     status = st.status("📖 **Extraction des CV...**", expanded=True)
 
-    all_texts = []
-    for i, f in enumerate(uploaded_files):
+    all_texts = list(st.session_state.source_texts)  # start with stored texts
+    for i, f in enumerate(uploaded_files or []):
         status.write(f"📄 {f.name} : lecture...")
         doc = fitz.open(stream=f.read(), filetype="pdf")
         text = ""
@@ -267,6 +280,7 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
         st.stop()
 
     all_texts = [t[:8000] for t in all_texts]
+    st.session_state.source_texts = all_texts  # store for later re-use
     combined = "\n\n".join(all_texts)
     if len(combined) > 25000:
         combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
@@ -337,6 +351,7 @@ Offre à cibler :
         for sp in st.session_state.saved_profiles
     )
     if name_key and not exists:
+        profile["_source_texts"] = st.session_state.source_texts
         st.session_state.saved_profiles.append(profile)
         save_cloud()
 
