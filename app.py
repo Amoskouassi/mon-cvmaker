@@ -55,7 +55,13 @@ def load_cloud():
     try:
         resp = sb.table("profiles").select("data").eq("user_id", u.id).execute()
         if resp.data:
-            st.session_state.saved_profiles = resp.data[0]["data"]
+            cloud_profiles = resp.data[0]["data"]
+            # Merge: keep local ones not yet in cloud, add cloud ones not yet local
+            cloud_names = {p.get("personal_info", {}).get("full_name", "") for p in cloud_profiles}
+            local_extra = [p for p in st.session_state.saved_profiles
+                           if p.get("personal_info", {}).get("full_name", "") not in cloud_names]
+            st.session_state.saved_profiles = cloud_profiles + local_extra
+            save_cloud()  # persist merged result
     except Exception:
         pass
 
