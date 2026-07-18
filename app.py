@@ -25,10 +25,10 @@ with st.sidebar:
                             value=os.environ.get("OPENROUTER_API_KEY", ""))
     if api_key:
         os.environ["OPENROUTER_API_KEY"] = api_key
-        st.success("✅ Clé configurée")
     else:
         st.warning("📌 [Obtenir une clé](https://openrouter.ai/keys)")
         st.stop()
+    cv_lang = st.selectbox("🌐 Langue du CV", ["Français", "English", "Español", "Português"], index=0)
 
 
 # ---------- AI Call ----------
@@ -82,6 +82,8 @@ if "extracted" not in st.session_state:
     st.session_state.extracted = None
 if "jd_text" not in st.session_state:
     st.session_state.jd_text = None
+if "cover_letter" not in st.session_state:
+    st.session_state.cover_letter = None
 
 # ---------- Extract & Optimize ----------
 if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_width=True):
@@ -89,16 +91,18 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
         st.warning("⚠️ Importe au moins un CV ET colle une offre.")
         st.stop()
 
-    # Clear previous state
     st.session_state.profile = None
     st.session_state.opt_data = None
     st.session_state.extracted = None
+    st.session_state.cover_letter = None
 
-    # Step 1 : Extract text from all PDFs
+    progress = st.progress(0, text="📖 Extraction des CV...")
     status = st.status("📖 Extraction des CV...", expanded=True)
+
     all_texts = []
-    for f in uploaded_files:
+    for i, f in enumerate(uploaded_files):
         status.write(f"📄 {f.name} : lecture...")
+        progress.progress(int((i+1)/len(uploaded_files)*20), text=f"📖 Lecture de {f.name}...")
         doc = fitz.open(stream=f.read(), filetype="pdf")
         text = ""
         for page in doc:
@@ -111,20 +115,22 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
         st.error("❌ Aucun texte extrait des PDF.")
         st.stop()
 
-    # Truncate each CV to avoid prompt overflow
     all_texts = [t[:8000] for t in all_texts]
     combined = "\n\n".join(all_texts)
     if len(combined) > 25000:
         combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
 
-    # Step 2 : Merge AND optimize in a single call
-    status.write("🤖 Fusion des CV + optimisation pour l'offre... (1-2 min)")
+    progress.progress(25, text="🤖 Fusion + optimisation IA...")
+    status.write("🤖 Fusion des CV + optimisation pour l'offre...")
+
+    lang_map = {"Français": "FRANÇAIS", "English": "ENGLISH", "Español": "ESPAÑOL", "Português": "PORTUGUÊS"}
+    lang_rule = lang_map.get(cv_lang, "FRANÇAIS")
 
     full_prompt = f"""Tu reçois plusieurs CV d'une même personne ET une offre d'emploi.
 Fusionne TOUTES les informations de tous les CV en un profil complet, puis génère un CV optimisé pour l'offre.
 
 Retourne UNIQUEMENT un JSON avec cette structure :
-{{
+{{{{
   "personal_info": {{ "full_name": "", "email": "", "phone": "", "location": "", "title": "" }},
   "summary": "RÉSUMÉ OPTIMISÉ (4-5 lignes percutantes, riche en mots-clés de l'offre)",
   "skills": {{ "catégorie": ["compétence1", "compétence2", ...] }},
@@ -134,7 +140,7 @@ Retourne UNIQUEMENT un JSON avec cette structure :
   ],
   "certifications": [],
   "languages": [{{ "lang": "", "level": "" }}]
-}}
+}}}}
 
 RÈGLES STRICTES :
 1. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
@@ -143,7 +149,7 @@ RÈGLES STRICTES :
 4. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE (ex: "+30% de réussite", "encadré 15 formateurs", "formé 200 apprenants")
 5. Garde les vraies expériences, n'invente RIEN
 6. Compétences techniques : max 8 au total, choisis les PLUS PERTINENTES pour l'offre
-7. FRANÇAIS uniquement, orthographe parfaite. AUCUN texte en langue Baoulé ou autres langues étrangères non demandées.
+7. Langue du CV : {lang_rule} uniquement, orthographe parfaite. AUCUN texte en langue Baoulé ou autres langues étrangères non demandées.
 8. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation"). Ne mets pas juste "Master" ou "Licence".
 9. Pour le plus haut diplôme (Master ou équivalent), ajoute une description (description) de 1-2 lignes expliquant le mémoire ou le projet principal si l'offre le requiert
 10. Les noms d'entreprises, universités et lieux doivent être en format normal (première lettre de chaque mot en majuscule), PAS en majuscules
@@ -158,8 +164,8 @@ Offre à cibler :
 {jd_text}"""
 
     result_json = call_ai(full_prompt, "Tu es un assistant spécialisé en CV. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après. Pas de ```json ni ```.")
+    progress.progress(70, text="📋 Analyse du résultat...")
     result_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", result_json, flags=re.MULTILINE).strip()
-    # Try to extract JSON from the response if it's embedded in text
     json_match = re.search(r"\{.*\}", result_json, re.DOTALL)
     if json_match:
         result_json = json_match.group()
@@ -171,10 +177,14 @@ Offre à cibler :
         st.info("💡 Relance la génération, l'IA peut parfois mal formater.")
         st.stop()
 
-    # Store in session_state for editing step
+    progress.progress(100, text="✅ CV généré !")
+    progress.empty()
+
     st.session_state.profile = profile
     st.session_state.opt_data = profile
     st.session_state.extracted = True
+    st.session_state.cv_lang = cv_lang
+    st.session_state.jd_text = jd_text
     st.rerun()
 
 # ---------- Edit & Generate PDF ----------
@@ -434,5 +444,50 @@ if st.session_state.profile:
     with open(out_file, "rb") as f:
         st.download_button("📄 Télécharger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
                            mime="application/pdf", use_container_width=True)
+
+    # ── Cover Letter ──
+    st.divider()
+    st.subheader("📝 Lettre de motivation")
+
+    if st.session_state.cover_letter:
+        with st.expander("📋 Aperçu de la lettre", expanded=True):
+            st.markdown(st.session_state.cover_letter)
+        st.text_area("📄 Copier le texte", st.session_state.cover_letter, height=300, key="cl_text")
+    else:
+        if st.button("✍️ Générer la lettre de motivation", use_container_width=True):
+            cl_status = st.status("✍️ Génération de la lettre...")
+            jd = st.session_state.get("jd_text", "")
+
+            cl_prompt = f"""Rédige une lettre de motivation professionnelle ET personnalisée pour l'offre ci-dessous.
+
+Utilise ces informations du candidat :
+- Nom : {name}
+- Titre : {title_text}
+- Email : {email}
+- Téléphone : {phone}
+- Localisation : {location}
+- Résumé : {summary}
+- Compétences : {', '.join(skill_list[:6])}
+- Expériences : {', '.join([e.get('position','')+' chez '+e.get('company','') for e in experience[:2]])}
+
+Structure :
+1. Coordonnées de l'expéditeur (en haut à droite)
+2. Objet : Candidature pour [poste]
+3. Corps (3 paragraphes max) :
+   - Paragraphe 1 : Poste visé et motivation
+   - Paragraphe 2 : Compétences clés et réalisations chiffrées en lien avec l'offre
+   - Paragraphe 3 : Disponibilité et formule de politesse
+4. Formule de politesse
+
+Langue : {st.session_state.get("cv_lang", "Français")}
+RÈGLE : écris UNIQUEMENT dans cette langue. Pas de Baoulé.
+
+Offre d'emploi :
+{jd}"""
+
+            cl_result = call_ai(cl_prompt, "Tu rédiges des lettres de motivation professionnelles, concises et percutantes.")
+            cl_status.update(label="✅ Lettre générée !", state="complete", expanded=False)
+            st.session_state.cover_letter = cl_result
+            st.rerun()
 
 
