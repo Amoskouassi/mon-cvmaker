@@ -205,7 +205,7 @@ if st.session_state.profile:
         st.stop()
     status = st.status("📝 Génération du PDF...")
 
-    import tempfile, os, urllib.parse, subprocess, sys
+    import tempfile, os, subprocess, sys, base64
     from pathlib import Path
 
     summary = opt_data.get("summary", profile.get("summary", ""))
@@ -377,21 +377,6 @@ if st.session_state.profile:
             .replace("{{TOOL_LIST}}", "".join(tool_list)))
 
     # ── Preview & PDF ──
-    status.write("📄 Préparation du CV...")
-
-    # Save HTML for preview
-    preview_html = Path(tempfile.mktemp(suffix=".html"))
-    preview_html.write_text(html, encoding="utf-8")
-
-    html_encoded = urllib.parse.quote(html)
-    st.markdown(
-        f'<a href="data:text/html;charset=utf-8,{html_encoded}" target="_blank" '
-        f'style="display:block; text-align:center; padding:12px; background:#C5A059; '
-        f'color:white; text-decoration:none; border-radius:6px; font-weight:700; '
-        f'margin-bottom:12px;">&#128065; Aperçu du CV dans un nouvel onglet</a>',
-        unsafe_allow_html=True,
-    )
-
     status.write("🖨️ Génération du PDF...")
     out_file = Path(tempfile.mktemp(suffix=".pdf"))
 
@@ -424,6 +409,19 @@ if st.session_state.profile:
 
     status.update(label="✅ CV optimisé généré !", state="complete", expanded=False)
     clean_name = re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
+
+    # PDF preview via base64 data URI
+    with open(out_file, "rb") as f:
+        pdf_b64 = base64.b64encode(f.read()).decode()
+    pdf_data_uri = f"data:application/pdf;base64,{pdf_b64}"
+    st.markdown(
+        f'<a href="{pdf_data_uri}" target="_blank" '
+        f'style="display:block; text-align:center; padding:12px; background:#C5A059; '
+        f'color:white; text-decoration:none; border-radius:6px; font-weight:700; '
+        f'margin-bottom:12px;">&#128065; Aperçu du CV dans un nouvel onglet</a>',
+        unsafe_allow_html=True,
+    )
+
     with open(out_file, "rb") as f:
         st.download_button("📄 Télécharger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
                            mime="application/pdf", use_container_width=True)
