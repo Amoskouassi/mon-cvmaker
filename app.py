@@ -30,6 +30,44 @@ with st.sidebar:
         st.stop()
     cv_lang = st.selectbox("🌐 Langue du CV", ["Français", "English", "Español", "Português"], index=0)
 
+    st.divider()
+    st.subheader("💾 Profils sauvegardés")
+
+    # Import profiles
+    imported_file = st.file_uploader("Importer des profils (.json)", type="json", key="import_profiles")
+    if imported_file:
+        try:
+            data = json.loads(imported_file.read())
+            if isinstance(data, list):
+                st.session_state.saved_profiles.extend(data)
+                st.success(f"✅ {len(data)} profils importés")
+                st.rerun()
+        except Exception:
+            st.error("❌ Fichier invalide")
+
+    # Saved profiles list
+    if st.session_state.saved_profiles:
+        for idx, sp in enumerate(st.session_state.saved_profiles):
+            sp_name = sp.get("personal_info", {}).get("full_name", f"Profil {idx+1}")
+            sp_title = sp.get("personal_info", {}).get("title", "")
+            label = f"{sp_name}" + (f" — {sp_title}" if sp_title else "")
+            cols = st.columns([3, 1])
+            with cols[0]:
+                if st.button(f"📂 {label}", key=f"load_sp_{idx}", use_container_width=True):
+                    st.session_state.profile = sp
+                    st.session_state.opt_data = sp
+                    st.session_state.extracted = True
+                    st.rerun()
+            with cols[1]:
+                if st.button("🗑️", key=f"del_sp_{idx}"):
+                    st.session_state.saved_profiles.pop(idx)
+                    st.rerun()
+
+        # Export all
+        export_data = json.dumps(st.session_state.saved_profiles, ensure_ascii=False, indent=2).encode("utf-8")
+        st.download_button("📥 Tout exporter", data=export_data, file_name="profiles.json",
+                           mime="application/json", use_container_width=True)
+
 
 # ---------- AI Call ----------
 def call_ai(prompt: str, system: str = "") -> str:
@@ -84,6 +122,8 @@ if "jd_text" not in st.session_state:
     st.session_state.jd_text = None
 if "cover_letter" not in st.session_state:
     st.session_state.cover_letter = None
+if "saved_profiles" not in st.session_state:
+    st.session_state.saved_profiles = []
 
 # ---------- Extract & Optimize ----------
 if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_width=True):
@@ -118,7 +158,7 @@ if st.button("🚀 Générer mon CV optimisé", type="primary", use_container_wi
     if len(combined) > 25000:
         combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
 
-    status.write("🤖 **Fusion + optimisation IA...** (1-2 min)")
+    status.write("⏳ **Fusion + optimisation IA...**")
 
     lang_map = {"Français": "FRANÇAIS", "English": "ENGLISH", "Español": "ESPAÑOL", "Português": "PORTUGUÊS"}
     lang_rule = lang_map.get(cv_lang, "FRANÇAIS")
@@ -160,7 +200,8 @@ CVs à fusionner :
 Offre à cibler :
 {jd_text}"""
 
-    result_json = call_ai(full_prompt, "Tu es un assistant spécialisé en CV. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après. Pas de ```json ni ```.")
+    with st.spinner("🤖 Fusion IA en cours... (1-2 min)"):
+        result_json = call_ai(full_prompt, "Tu es un assistant spécialisé en CV. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après. Pas de ```json ni ```.")
     status.write("📋 **Analyse du résultat...**")
     result_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", result_json, flags=re.MULTILINE).strip()
     json_match = re.search(r"\{.*\}", result_json, re.DOTALL)
@@ -175,6 +216,15 @@ Offre à cibler :
         st.stop()
 
     status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
+
+    # Auto-save to profile database
+    name_key = profile.get("personal_info", {}).get("full_name", profile.get("name", ""))
+    exists = any(
+        sp.get("personal_info", {}).get("full_name", "") == name_key
+        for sp in st.session_state.saved_profiles
+    )
+    if name_key and not exists:
+        st.session_state.saved_profiles.append(profile)
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
