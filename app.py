@@ -5,8 +5,6 @@ import io
 import re
 import os
 import json
-import base64
-import gzip
 import time
 from pathlib import Path
 
@@ -35,23 +33,55 @@ if "cover_letter" not in st.session_state:
 if "saved_profiles" not in st.session_state:
     st.session_state.saved_profiles = []
 
-# Helper: persist profiles to URL (survives page refresh)
-def persist_profiles():
-    if st.session_state.saved_profiles:
-        raw = json.dumps(st.session_state.saved_profiles, ensure_ascii=False)
-        st.query_params["profiles"] = base64.b64encode(gzip.compress(raw.encode("utf-8"))).decode("utf-8")
-    else:
-        st.query_params.pop("profiles", None)
+# ---------- Cloud sync (Supabase) ----------
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "") or st.secrets.get("supabase", {}).get("url", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "") or st.secrets.get("supabase", {}).get("anon_key", "")
 
-# Restore profiles from URL on first load
+def _sb_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+def load_cloud(sync_key: str):
+    if not sync_key or not SUPABASE_URL:
+        return None
+    try:
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            headers=_sb_headers(),
+            params={"sync_key": f"eq.{sync_key}", "limit": "1", "order": "updated_at.desc"},
+            timeout=10,
+        )
+        if resp.ok and resp.json():
+            return resp.json()[0].get("data", [])
+    except Exception:
+        pass
+    return None
+
+def save_cloud(sync_key: str, profiles: list):
+    if not sync_key or not SUPABASE_URL:
+        return
+    try:
+        payload = {"sync_key": sync_key, "data": profiles, "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        requests.post(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates"},
+            params={"on_conflict": "sync_key"},
+            json=payload,
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+# Restore profiles on first load
 if "profiles_init" not in st.session_state:
-    stored = st.query_params.get("profiles")
-    if stored:
-        try:
-            decoded = gzip.decompress(base64.b64decode(stored)).decode("utf-8")
-            st.session_state.saved_profiles = json.loads(decoded)
-        except Exception:
-            pass
+    sync_key = st.query_params.get("sync_key", "")
+    if sync_key:
+        cloud_data = load_cloud(sync_key)
+        if cloud_data is not None:
+            st.session_state.saved_profiles = cloud_data
     st.session_state.profiles_init = True
 
 # ---------- Sidebar ----------
@@ -69,6 +99,16 @@ with st.sidebar:
     st.divider()
     st.subheader("💾 Profils sauvegardés")
 
+    # Sync key for cross-device access
+    sync_key = st.text_input("🔑 Clé de synchronisation",
+                             value=st.query_params.get("sync_key", ""),
+                             placeholder="ex: mon-mot-de-passe-unique",
+                             help="Utilise la même clé sur tous tes appareils pour synchroniser tes profils")
+    if sync_key:
+        st.query_params["sync_key"] = sync_key
+    else:
+        st.query_params.pop("sync_key", None)
+
     # Import profiles
     imported_file = st.file_uploader("Importer des profils (.json)", type="json", key="import_profiles")
     if imported_file:
@@ -76,7 +116,7 @@ with st.sidebar:
             data = json.loads(imported_file.read())
             if isinstance(data, list):
                 st.session_state.saved_profiles.extend(data)
-                persist_profiles()
+                save_cloud(sync_key, st.session_state.saved_profiles) if sync_key else None
                 st.success(f"✅ {len(data)} profils importés")
                 st.rerun()
         except Exception:
@@ -98,7 +138,9 @@ with st.sidebar:
             with cols[1]:
                 if st.button("🗑️", key=f"del_sp_{idx}"):
                     st.session_state.saved_profiles.pop(idx)
-                    persist_profiles()
+                    sync_key = st.query_params.get("sync_key", "")
+                    if sync_key:
+                        save_cloud(sync_key, st.session_state.saved_profiles)
                     st.rerun()
 
         # Export all
@@ -248,7 +290,9 @@ Offre à cibler :
     )
     if name_key and not exists:
         st.session_state.saved_profiles.append(profile)
-        persist_profiles()
+        sync_key = st.query_params.get("sync_key", "")
+        if sync_key:
+            save_cloud(sync_key, st.session_state.saved_profiles)
 
     st.session_state.profile = profile
     st.session_state.opt_data = profile
