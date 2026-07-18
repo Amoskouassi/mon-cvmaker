@@ -386,6 +386,19 @@ if st.session_state.profile:
         location = st.text_input("Localisation", value=p.get("location", ""), key="edit_location")
         company = st.text_input("Entreprise ciblée", value=profile.get("_target_company", ""), key="edit_company")
 
+    if st.button("💾 Sauvegarder les modifications manuelles", use_container_width=True, key="btn_save_manual"):
+        profile.setdefault("personal_info", {})["full_name"] = name
+        profile.setdefault("personal_info", {})["email"] = email
+        profile.setdefault("personal_info", {})["title"] = poste
+        profile.setdefault("personal_info", {})["phone"] = phone
+        profile.setdefault("personal_info", {})["location"] = location
+        profile["_target_company"] = company
+        st.session_state.profile = profile
+        st.session_state.opt_data = profile
+        save_cloud()
+        st.success("✅ Modifications enregistrées !")
+        st.rerun()
+
     st.divider()
     st.subheader("🤖 Modification par IA")
     mod_prompt = st.text_area("Dis à l'IA ce que tu veux modifier",
@@ -401,18 +414,26 @@ if st.session_state.profile:
                 f"Réponds UNIQUEMENT avec le JSON complet modifié, sans texte avant ni après.",
                 "Tu modifies un profil CV. Retourne UNIQUEMENT le JSON modifié, valide, sans aucun texte autour."
             )
-            mod_result = re.sub(r"^```(?:json)?\s*|\s*```$", "", mod_result, flags=re.MULTILINE).strip()
+            mod_result = re.sub(r"```(?:json)?\s*", "", mod_result).strip()
             json_match = re.search(r"\{.*\}", mod_result, re.DOTALL)
             if json_match:
                 mod_result = json_match.group()
             try:
                 new_profile = json.loads(mod_result)
+                old_name = st.session_state.profile.get("personal_info", {}).get("full_name", "")
+                new_name = new_profile.get("personal_info", {}).get("full_name", "")
                 st.session_state.profile = new_profile
                 st.session_state.opt_data = new_profile
+                for k in ["edit_name","edit_email","edit_poste","edit_phone","edit_location","edit_company"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
+                if old_name and old_name != new_name:
+                    save_cloud()
+                st.success("✅ CV modifié avec succès !")
                 st.rerun()
             except json.JSONDecodeError:
-                st.error("❌ L'IA n'a pas retourné un JSON valide.")
-                st.code(mod_result[:1000])
+                st.error("❌ L'IA n'a pas retourné un JSON valide. Réponse brute :")
+                st.code(mod_result[:1500])
 
     gen_pdf = st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf")
     gen_cl = st.button("✍️ Générer la lettre de motivation", use_container_width=True, key="gen_cl")
