@@ -678,9 +678,6 @@ if st.session_state.profile:
 
         st.download_button("📄 Télécharger le CV (PDF)", data=pdf_bytes, file_name=pdf_filename,
                            mime="application/pdf", use_container_width=True)
-
-        st.download_button("📄 Télécharger le CV (PDF)", data=pdf_bytes, file_name=pdf_filename,
-                           mime="application/pdf", use_container_width=True)
     # ---------- Cover Letter Generation ----------
     if gen_cl:
         cl_status = st.status("✍️ Génération de la lettre...")
