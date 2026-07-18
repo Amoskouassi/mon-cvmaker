@@ -213,9 +213,12 @@ if st.session_state.profile:
         phone = st.text_input("Téléphone", value=p.get("phone", ""), key="edit_phone")
         location = st.text_input("Localisation", value=p.get("location", ""), key="edit_location")
 
-    if not st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf"):
-        st.stop()
-    status = st.status("📝 Génération du PDF...")
+    gen_pdf = st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf")
+    gen_cl = st.button("✍️ Générer la lettre de motivation", use_container_width=True, key="gen_cl")
+
+    # ---------- PDF Generation ----------
+    if gen_pdf:
+        status = st.status("📝 Génération du PDF...")
 
     import tempfile, os, subprocess, sys, base64
     from pathlib import Path
@@ -317,6 +320,16 @@ if st.session_state.profile:
     skill_list = skill_list[:8]  # max 8 compétences
 
     # Full HTML template (pure CSS, no Tailwind CDN — works with weasyprint)
+    lang_tpl = st.session_state.get("cv_lang", "Français")
+    if lang_tpl == "English":
+        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "PROFESSIONAL EXPERIENCE", "EDUCATION", "LANGUAGES", "SKILLS", "TOOLS"
+    elif lang_tpl == "Español":
+        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERIENCIA PROFESIONAL", "FORMACIÓN", "IDIOMAS", "COMPETENCIAS", "HERRAMIENTAS"
+    elif lang_tpl == "Português":
+        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPERIÊNCIA PROFISSIONAL", "FORMAÇÃO", "IDIOMAS", "COMPETÊNCIAS", "FERRAMENTAS"
+    else:
+        sec_exp, sec_edu, sec_lang, sec_skills, sec_tools = "EXPÉRIENCES PROFESSIONNELLES", "FORMATION", "LANGUES", "COMPÉTENCES", "OUTILS"
+
     _html_tpl = r"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -359,24 +372,24 @@ if st.session_state.profile:
     </div>
     <div class="summary">{{SUMMARY}}</div>
 
-    <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
+    <div class="section-title">{{SEC_EXP}}</div>
     {{EXP_HTML}}
 
-    <div class="section-title">FORMATION</div>
+    <div class="section-title">{{SEC_EDU}}</div>
     {{EDU_HTML}}
   </div>
 
   <div class="bottom-section">
     <div class="bottom-col">
-      <div class="section-title">LANGUES</div>
+      <div class="section-title">{{SEC_LANG}}</div>
       <ul>{{LANG_LIST}}</ul>
     </div>
     <div class="bottom-col">
-      <div class="section-title">COMP&#201;TENCES</div>
+      <div class="section-title">{{SEC_SKILLS}}</div>
       <ul>{{SKILL_LIST}}</ul>
     </div>
     <div class="bottom-col">
-      <div class="section-title">OUTILS</div>
+      <div class="section-title">{{SEC_TOOLS}}</div>
       <ul>{{TOOL_LIST}}</ul>
     </div>
   </div>
@@ -389,6 +402,11 @@ if st.session_state.profile:
             .replace("{{PHONE}}", esc_html(phone))
             .replace("{{LOCATION}}", esc_html(location))
             .replace("{{SUMMARY}}", esc_html(summary))
+            .replace("{{SEC_EXP}}", sec_exp)
+            .replace("{{SEC_EDU}}", sec_edu)
+            .replace("{{SEC_LANG}}", sec_lang)
+            .replace("{{SEC_SKILLS}}", sec_skills)
+            .replace("{{SEC_TOOLS}}", sec_tools)
             .replace("{{EXP_HTML}}", exp_html)
             .replace("{{EDU_HTML}}", edu_html)
             .replace("{{LANG_LIST}}", "".join(lang_list))
@@ -445,30 +463,31 @@ if st.session_state.profile:
         st.download_button("📄 Télécharger le CV (PDF)", f, file_name=f"CV_{clean_name}.pdf",
                            mime="application/pdf", use_container_width=True)
 
-    # ── Cover Letter ──
-    st.divider()
-    st.subheader("📝 Lettre de motivation")
+    # ---------- Cover Letter Generation ----------
+    if gen_cl:
+        cl_status = st.status("✍️ Génération de la lettre...")
+        jd = st.session_state.get("jd_text", "")
+        p = profile.get("personal_info", {})
+        cl_name = st.session_state.get("edit_name", p.get("full_name", ""))
+        cl_title = profile.get("personal_info", {}).get("title", "") or opt_data.get("title", "")
+        cl_summary = opt_data.get("summary", profile.get("summary", ""))
+        cl_skills = opt_data.get("skills", profile.get("skills", {}))
+        cl_experience = opt_data.get("experience", profile.get("experience", []))
+        cl_sk_list = []
+        for cat, items in cl_skills.items():
+            if items:
+                for it in items:
+                    cl_sk_list.append(it)
+        cl_lang = st.session_state.get("cv_lang", "Français")
 
-    if st.session_state.cover_letter:
-        with st.expander("📋 Aperçu de la lettre", expanded=True):
-            st.markdown(st.session_state.cover_letter)
-        st.text_area("📄 Copier le texte", st.session_state.cover_letter, height=300, key="cl_text")
-    else:
-        if st.button("✍️ Générer la lettre de motivation", use_container_width=True):
-            cl_status = st.status("✍️ Génération de la lettre...")
-            jd = st.session_state.get("jd_text", "")
-
-            cl_prompt = f"""Rédige une lettre de motivation professionnelle ET personnalisée pour l'offre ci-dessous.
+        cl_prompt = f"""Rédige une lettre de motivation professionnelle ET personnalisée pour l'offre ci-dessous.
 
 Utilise ces informations du candidat :
-- Nom : {name}
-- Titre : {title_text}
-- Email : {email}
-- Téléphone : {phone}
-- Localisation : {location}
-- Résumé : {summary}
-- Compétences : {', '.join(skill_list[:6])}
-- Expériences : {', '.join([e.get('position','')+' chez '+e.get('company','') for e in experience[:2]])}
+- Nom : {cl_name}
+- Titre : {cl_title}
+- Résumé : {cl_summary}
+- Compétences : {', '.join(cl_sk_list[:6])}
+- Expériences : {', '.join([e.get('position','')+' chez '+e.get('company','') for e in cl_experience[:2]])}
 
 Structure :
 1. Coordonnées de l'expéditeur (en haut à droite)
@@ -479,15 +498,23 @@ Structure :
    - Paragraphe 3 : Disponibilité et formule de politesse
 4. Formule de politesse
 
-Langue : {st.session_state.get("cv_lang", "Français")}
+Langue : {cl_lang}
 RÈGLE : écris UNIQUEMENT dans cette langue. Pas de Baoulé.
 
 Offre d'emploi :
 {jd}"""
 
-            cl_result = call_ai(cl_prompt, "Tu rédiges des lettres de motivation professionnelles, concises et percutantes.")
-            cl_status.update(label="✅ Lettre générée !", state="complete", expanded=False)
-            st.session_state.cover_letter = cl_result
-            st.rerun()
+        cl_result = call_ai(cl_prompt, "Tu rédiges des lettres de motivation professionnelles, concises et percutantes.")
+        cl_status.update(label="✅ Lettre générée !", state="complete", expanded=False)
+        st.session_state.cover_letter = cl_result
+        st.rerun()
+
+    # Show cover letter if exists
+    if st.session_state.cover_letter:
+        st.divider()
+        st.subheader("📝 Lettre de motivation")
+        with st.expander("📋 Aperçu de la lettre", expanded=True):
+            st.markdown(st.session_state.cover_letter)
+        st.text_area("📄 Copier le texte", st.session_state.cover_letter, height=300, key="cl_text")
 
 
