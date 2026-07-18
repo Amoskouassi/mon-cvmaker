@@ -398,8 +398,15 @@ if st.session_state.profile:
     is_linux = sys.platform.startswith("linux")
 
     if is_linux:
-        import pdfkit
-        pdfkit.from_string(html, str(out_file))
+        html_path = Path(tempfile.mktemp(suffix=".html"))
+        html_path.write_text(html, encoding="utf-8")
+        subprocess.run(
+            ["wkhtmltopdf", "--page-size", "A4", "--margin-top", "15mm",
+             "--margin-bottom", "15mm", "--margin-left", "15mm",
+             "--margin-right", "15mm", "--encoding", "utf-8",
+             str(html_path), str(out_file)],
+            capture_output=True, timeout=60,
+        )
     else:
         # Windows: use Edge headless
         edge_candidates = [
