@@ -346,9 +346,7 @@ if st.session_state.profile:
       <span><span class="icon">&#9782;</span> {{LOCATION}}</span>
     </div>
     <div class="summary">{{SUMMARY}}</div>
-  </div>
 
-  <div style="page-break-inside: avoid;">
     <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
     {{EXP_HTML}}
 
