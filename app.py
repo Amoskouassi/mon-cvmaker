@@ -337,20 +337,26 @@ if st.session_state.profile:
 </head>
 <body>
 <div class="page">
-  <div class="name">{{NAME}}</div>
-  <div class="title">{{TITLE}}</div>
-  <div class="contact">
-    <span><span class="icon">&#9993;</span> {{EMAIL}}</span>
-    <span><span class="icon">&#9742;</span> {{PHONE}}</span>
-    <span><span class="icon">&#9782;</span> {{LOCATION}}</span>
+  <div style="page-break-inside: avoid;">
+    <div class="name">{{NAME}}</div>
+    <div class="title">{{TITLE}}</div>
+    <div class="contact">
+      <span><span class="icon">&#9993;</span> {{EMAIL}}</span>
+      <span><span class="icon">&#9742;</span> {{PHONE}}</span>
+      <span><span class="icon">&#9782;</span> {{LOCATION}}</span>
+    </div>
+    <div class="summary">{{SUMMARY}}</div>
   </div>
-  <div class="summary">{{SUMMARY}}</div>
 
-  <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
-  {{EXP_HTML}}
+  <div style="page-break-inside: avoid;">
+    <div class="section-title">EXP&#201;RIENCES PROFESSIONNELLES</div>
+    {{EXP_HTML}}
+  </div>
 
-  <div class="section-title">FORMATION</div>
-  {{EDU_HTML}}
+  <div style="page-break-inside: avoid;">
+    <div class="section-title">FORMATION</div>
+    {{EDU_HTML}}
+  </div>
 
   <div class="bottom-section">
     <div class="bottom-col">
