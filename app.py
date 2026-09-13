@@ -332,6 +332,15 @@ RÈGLES STRICTES :
 11. _target_company : extrais le nom de l'entreprise depuis l'offre d'emploi.
 12. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
+⚠️ ANTI-HALLUCINATION (RÈGLE ABSOLUE) :
+- N'invente JAMAIS de chiffres, de résultats, de noms d'entreprises, de postes ou de compétences qui ne sont PAS dans les CV source.
+- Si un CV ne contient pas de chiffres pour une expérience, réécris la réalisation SANS en ajouter.
+- Ne crée PAS de nouvelles expériences professionnelles. Utilise UNIQUEMENT celles présentes dans les CV.
+- Ne crée PAS de nouvelles certifications ou formations. Utilise UNIQUEMENT celles présentes dans les CV.
+- Les "optimized_achievements" doivent être des RÉÉCRITURES de ce qui existe déjà, pas des inventions.
+- Si tu n'as pas assez de matière, reduis le nombre d'expériences plutôt qu'en inventer.
+- En cas de doute sur une info, SUPPRIME-la au lieu d'inventer.
+
 CVs à fusionner :
 {combined}
 
@@ -727,6 +736,8 @@ Structure :
 
 Langue : {cl_lang}
 RÈGLE : écris UNIQUEMENT dans cette langue. Pas de Baoulé.
+
+⚠️ ANTI-HALLUCINATION : N'invente JAMAIS de compétences, expériences ou résultats. Utilise UNIQUEMENT les informations fournies ci-dessus. Si tu n'as pas assez de matière, raccourcis plutôt qu'inventer.
 
 Offre d'emploi :
 {jd}"""
