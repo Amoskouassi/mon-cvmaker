@@ -220,7 +220,7 @@ def call_ai(prompt: str, system: str = "") -> str:
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
-                    "model": "google/gemma-4-26b-a4b-it:free",
+                    "model": "openrouter/free",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},
