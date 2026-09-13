@@ -9,12 +9,18 @@ import base64
 import time
 from pathlib import Path
 
-# Read API key from .env
+# Read API key from .env or Streamlit secrets
 _env_file = Path(__file__).resolve().parent / ".env"
 if _env_file.exists():
     for line in _env_file.read_text(encoding="utf-8").splitlines():
         if line.startswith("OPENROUTER_API_KEY="):
             os.environ["OPENROUTER_API_KEY"] = line.split("=", 1)[1].strip()
+
+if not os.environ.get("OPENROUTER_API_KEY"):
+    try:
+        os.environ["OPENROUTER_API_KEY"] = st.secrets["OPENROUTER_API_KEY"]
+    except Exception:
+        pass
 
 st.set_page_config(page_title="CV Optimizer IA", layout="centered")
 st.title("📄 CV Optimizer IA")
