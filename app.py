@@ -225,7 +225,7 @@ def call_ai(prompt: str, system: str = "") -> str:
             )
             if resp.status_code == 429:
                 err_msg = resp.json().get("error",{}).get("message","429")
-                wait = 30
+                wait = 60
                 st.warning(f"⏳ tentative {attempt+1}/3 - {err_msg[:100]}. Attente {wait}s...")
                 time.sleep(wait)
                 continue
@@ -235,10 +235,10 @@ def call_ai(prompt: str, system: str = "") -> str:
             st.warning(f"⚠️ tentative {attempt+1}/3 : {e}")
             if attempt == 2:
                 st.error(f"❌ Erreur API après 3 tentatives : {e}")
-                st.stop()
-            time.sleep(5)
+                return ""
+            time.sleep(10)
     st.error("❌ Échec API : toutes les tentatives ont épuisé.")
-    st.stop()
+    return ""
 
 
 # ---------- UI ----------
@@ -334,6 +334,9 @@ Offre à cibler :
 
     with st.spinner("🤖 Fusion IA en cours... (1-2 min)"):
         result_json = call_ai(full_prompt, "Tu es un assistant spécialisé en CV. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après. Pas de ```json ni ```.")
+    if not result_json:
+        st.error("❌ Échec de l'appel IA. Réessaie dans quelques secondes.")
+        st.stop()
     status.write("📋 **Analyse du résultat...**")
     result_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", result_json, flags=re.MULTILINE).strip()
     json_match = re.search(r"\{.*\}", result_json, re.DOTALL)
@@ -414,26 +417,29 @@ if st.session_state.profile:
                 f"Réponds UNIQUEMENT avec le JSON complet modifié, sans texte avant ni après.",
                 "Tu modifies un profil CV. Retourne UNIQUEMENT le JSON modifié, valide, sans aucun texte autour."
             )
-            mod_result = re.sub(r"```(?:json)?\s*", "", mod_result).strip()
-            json_match = re.search(r"\{.*\}", mod_result, re.DOTALL)
-            if json_match:
-                mod_result = json_match.group()
-            try:
-                new_profile = json.loads(mod_result)
-                old_name = st.session_state.profile.get("personal_info", {}).get("full_name", "")
-                new_name = new_profile.get("personal_info", {}).get("full_name", "")
-                st.session_state.profile = new_profile
-                st.session_state.opt_data = new_profile
-                for k in ["edit_name","edit_email","edit_poste","edit_phone","edit_location","edit_company"]:
-                    if k in st.session_state:
-                        del st.session_state[k]
-                if old_name and old_name != new_name:
-                    save_cloud()
-                st.success("✅ CV modifié avec succès !")
-                st.rerun()
-            except json.JSONDecodeError:
-                st.error("❌ L'IA n'a pas retourné un JSON valide. Réponse brute :")
-                st.code(mod_result[:1500])
+            if not mod_result:
+                st.error("❌ Échec de l'appel IA pour la modification.")
+            else:
+                mod_result = re.sub(r"```(?:json)?\s*", "", mod_result).strip()
+                json_match = re.search(r"\{.*\}", mod_result, re.DOTALL)
+                if json_match:
+                    mod_result = json_match.group()
+                try:
+                    new_profile = json.loads(mod_result)
+                    old_name = st.session_state.profile.get("personal_info", {}).get("full_name", "")
+                    new_name = new_profile.get("personal_info", {}).get("full_name", "")
+                    st.session_state.profile = new_profile
+                    st.session_state.opt_data = new_profile
+                    for k in ["edit_name","edit_email","edit_poste","edit_phone","edit_location","edit_company"]:
+                        if k in st.session_state:
+                            del st.session_state[k]
+                    if old_name and old_name != new_name:
+                        save_cloud()
+                    st.success("✅ CV modifié avec succès !")
+                    st.rerun()
+                except json.JSONDecodeError:
+                    st.error("❌ L'IA n'a pas retourné un JSON valide. Réponse brute :")
+                    st.code(mod_result[:1500])
 
     gen_pdf = st.button("✅ Générer le PDF", use_container_width=True, type="primary", key="gen_pdf")
     gen_cl = st.button("✍️ Générer la lettre de motivation", use_container_width=True, key="gen_cl")
@@ -720,9 +726,12 @@ Offre d'emploi :
 {jd}"""
 
         cl_result = call_ai(cl_prompt, "Tu rédiges des lettres de motivation professionnelles, concises et percutantes.")
-        cl_status.update(label="✅ Lettre générée !", state="complete", expanded=False)
-        st.session_state.cover_letter = cl_result
-        st.rerun()
+        if cl_result:
+            cl_status.update(label="✅ Lettre générée !", state="complete", expanded=False)
+            st.session_state.cover_letter = cl_result
+            st.rerun()
+        else:
+            cl_status.update(label="❌ Échec de la génération", state="error", expanded=False)
 
     # Show cover letter if exists
     if st.session_state.cover_letter:
