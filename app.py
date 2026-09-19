@@ -220,7 +220,7 @@ def call_ai(prompt: str, system: str = "") -> str:
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
-                    "model": "openrouter/free",
+                    "model": "xiaomi/mimo-v2.5",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},
