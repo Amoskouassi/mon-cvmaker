@@ -381,7 +381,7 @@ Retourne UNIQUEMENT un JSON avec cette structure :
   "skills": {{ "catégorie": ["compétence1", "compétence2", ...] }},
   "education": [{{ "institution": "", "degree": "", "field": "", "start_date": "", "end_date": "", "description": "description du diplôme si pertinent pour l'offre" }}],
   "experience": [
-    {{ "company": "", "location": "", "position": "", "start_date": "", "end_date": "", "optimized_achievements": ["Réalisation CHIFFRÉE et adaptée à l'offre", ...] }}
+    {{ "company": "", "location": "", "position": "", "start_date": "", "end_date": "", "optimized_achievements": ["Réalisation issue EXACTEMENT du CV source", ...] }}
   ],
   "certifications": [],
   "languages": [{{ "lang": "", "level": "" }}],
@@ -414,7 +414,7 @@ RÈGLES STRICTES :
 7. Languages : garde UNIQUEMENT les langues mentionnées dans l'offre (ou le français par défaut).
 8. Le "title" doit être IDENTIQUE ou très proche de l'intitulé du poste dans l'offre.
 9. Le summary doit parler UNIQUEMENT de ce qui est pertinent pour cette offre.
-10. Chaque achievement doit être un CHIFFRE des CV source, adapté au contexte de l'offre.
+10. Chaque achievement doit être un fait PRÉSENT dans les CV source (chiffres, tâches, outils). Si le chiffre n'est pas dans le source → ne l'écris PAS.
 11. Langue du CV : {lang_rule} uniquement.
 12. Format dates : "Janvier 2020 - Décembre 2022" (mois en français). Les dates doivent être cohérentes et triables.
 13. _target_company : extrais le nom de l'entreprise depuis l'offre.
@@ -422,9 +422,13 @@ RÈGLES STRICTES :
 15. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
 ⚠️ ANTI-HALLUCINATION (RÈGLE ABSOLUE) :
-- Copie le nom, email, téléphone EXACTEMENT comme dans les CV source.
+- Copie le nom, email, téléphone, localisation EXACTEMENT comme dans les CV source. Jamais de variante ni de "protection".
+- Chaque entreprise, poste, lieu, date, description et chiffre doit EXISTER mot pour mot (ou quasi) dans les CV source.
+- N'INVENTE JAMAIS : ville, pays, secteur, milieu, environnement, type d'organisation, client, outil, chiffre, résultat, année, mission.
+- Le champ "location" d'une expérience : copie celui du CV source. S'il est absent → laisse "" (jamais de ville inventée).
+- Ne REFORMULE PAS un fait en y ajoutant du contexte. Si le source dit "collecte de données", n'écris pas "en milieu rural pour une ONG internationale".
+- Si le source est vague, reste vague. La précision inventée est interdite.
 - Si un champ est vide dans les CV source, laisse-le vide.
-- N'invente JAMAIS de chiffres, résultats, entreprises, postes ou compétences.
 - Ne crée PAS de nouvelles expériences. Utilise UNIQUEMENT celles des CV source.
 - En cas de doute → SUPPRIME au lieu d'ajouter.
 
@@ -459,35 +463,38 @@ Offre à cibler :
 
     # --- Vérification post-génération ---
     status.write("🔍 **Vérification pertinence + anti-hallucination...**")
-    verify_prompt = f"""Voici un CV généré par IA pour une offre d'emploi. Vérifie DEUX choses :
+    verify_prompt = f"""Tu es le vérificateur FINAL d'un CV. Une IA a généré le CV ci-dessous et tu dois le NETTOYER contre les CV source.
 
-1. PERTINENCE : Est-ce que chaque élément du CV a un rapport avec l'offre ? Si non → supprime-le.
-2. ANTI-HALLUCINATION : Est-ce que chaque info existe dans les CV source ? Si non → corrige-le.
-
-CV généré :
+CV généré par l'IA (peut contenir des mensonges) :
 {json.dumps(profile, ensure_ascii=False, indent=2)}
 
-CV source :
+CV source (LA VÉRITÉ, seule source autorisée) :
 {combined}
 
 Offre d'emploi :
 {jd_text}
 
-Retourne UNIQUEMENT un JSON avec cette structure :
-{{"corrections": {{ "champ_corrigé": "valeur_corrigée" }}, "issues": ["description du problème trouvé"]}}
+Mission : retourne le CV complet CORRIGÉ, en supprimant et corrigeant tout ce qui n'est pas prouvé par les CV source.
 
-RÈGLES :
-- Si le nom, email ou téléphone ne correspond PAS aux CV source → corrige-le
-- Si une expérience, compétence ou formation n'est PAS dans les CV source → supprime-la
-- Si un élément n'a AUCUN rapport avec l'offre → supprime-le (liste-le dans "issues")
-- Si un chiffre ou résultat n'est PAS dans les CV source → supprime-le
-- Si une date est incohérente ou mal formatée → corrige-la
-- Si les expériences ne sont pas du plus récent au plus ancien → réordonne-les
-- Si un outil (Kobo, ODK, etc.) est dans les compétences au lieu des outils → déplace-le
-- Si tout est correct, retourne {{"corrections": {{}}, "issues": []}}
+Retourne UNIQUEMENT ce JSON :
+{{"cv": {{...le CV complet corrigé, même structure que le CV généré...}}, "issues": ["ce que tu as supprimé/corrigé et pourquoi"]}}
+
+RÈGLES DE SUPPRESSION/CORRECTION :
+- Entreprise, poste, lieu, ville, pays, secteur, milieu, année qui n'apparaît PAS dans les CV source → supprime-le ou remplace par la valeur du source
+- Expérience entière non trouvée dans les CV source → supprime toute l'expérience
+- Chiffre, résultat, pourcentage absent des CV source → supprime ce chiffre (garde la tâche si elle est dans le source)
+- "location" d'une expérience absente du source → mets ""
+- Contexte inventé (ex: "en milieu rural", "pour une ONG", "dans le secteur bancaire") absent du source → supprime cette précision
+- Nom, email, téléphone différents du source → remets EXACTEMENT ceux du source
+- Élément sans rapport avec l'offre → supprime-le
+- Dates incohérentes ou mal formatées → corrige-les ("Janvier 2020 - Décembre 2022")
+- Expériences non classées du plus récent au plus ancien → réordonne-les
+- Outil (Kobo, ODK, QGIS, etc.) placé dans les compétences au lieu de "Outils" → déplace-le
+- Rien à corriger → {"cv": le CV reçu inchangé, "issues": []}
+- Le champ "cv" doit être le CV COMPLET (pas un extrait), avec la même structure que le CV généré.
 - Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."""
 
-    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict et qualitatif. Tu détectes les pertinences, hallucinations et erreurs de format.")
+    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict, honnête et qualitatif. Tu supprimes toute information qui n'existe pas dans les CV source. Tu retournes UNIQUEMENT un JSON valide.")
     if verify_result:
         verify_result = re.sub(r"```(?:json)?\s*", "", verify_result).strip()
         v_match = re.search(r"\{.*\}", verify_result, re.DOTALL)
@@ -496,38 +503,20 @@ RÈGLES :
                 verification = json.loads(v_match.group())
                 if not isinstance(verification, dict):
                     raise ValueError("verification not a dict")
-                corrections = verification.get("corrections", {})
                 issues = verification.get("issues", [])
-                if not isinstance(corrections, dict):
-                    corrections = {}
                 if not isinstance(issues, list):
                     issues = [str(issues)]
-                if corrections:
-                    for k, v in corrections.items():
-                        try:
-                            if "." in k:
-                                parts = k.split(".")
-                                obj = profile
-                                for p in parts[:-1]:
-                                    if isinstance(obj, dict):
-                                        obj = obj.get(p, {})
-                                    elif isinstance(obj, list) and p.isdigit():
-                                        idx = int(p)
-                                        obj = obj[idx] if idx < len(obj) else None
-                                    else:
-                                        obj = None
-                                        break
-                                if isinstance(obj, dict):
-                                    obj[parts[-1]] = v
-                            else:
-                                profile[k] = v
-                        except (AttributeError, IndexError, TypeError):
-                            pass
-                    st.warning(f"🔧 {len(corrections)} correction(s) appliquée(s) : {', '.join(str(k) for k in corrections.keys())}")
-                if issues:
-                    st.info(f"⚠️ {len(issues)} problème(s) détecté(s) : {'; '.join(str(i) for i in issues[:3])}")
+                corrected = verification.get("cv")
+                if isinstance(corrected, dict) and corrected.get("personal_info"):
+                    profile = corrected
+                    if issues:
+                        st.info(f"🧹 Vérification : {len(issues)} correction(s) — {'; '.join(str(i) for i in issues[:3])}")
+                    else:
+                        st.success("✅ Vérification : aucune anomalie détectée.")
+                elif issues:
+                    st.info(f"⚠️ {len(issues)} point(s) signalé(s) : {'; '.join(str(i) for i in issues[:3])}")
             except Exception:
-                pass
+                st.info("⚠️ Vérification IA non concluante, CV généré conservé tel quel.")
 
     # Normalisation de sécurité du profil
     if not isinstance(profile, dict):
@@ -538,6 +527,20 @@ RÈGLES :
     for kf in ("summary", "title"):
         if not isinstance(profile.get(kf, ""), str):
             profile[kf] = str(profile.get(kf, ""))
+
+    # Contrôle déterministe : les lieux doivent exister dans les CV source
+    src_lower = combined.lower()
+    removed_places = []
+    pi = profile.get("personal_info", {})
+    for field_owner, field_name in [(pi, "location")] + [
+        (e, "location") for e in (profile.get("experience") or []) if isinstance(e, dict)
+    ]:
+        loc = str(field_owner.get("location", "") or "").strip()
+        if loc and loc.lower() not in src_lower:
+            field_owner["location"] = ""
+            removed_places.append(loc)
+    if removed_places:
+        st.warning(f"🚫 Lieu(x) inventé(s) supprimé(s) : {', '.join(removed_places)}")
 
     status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
 
