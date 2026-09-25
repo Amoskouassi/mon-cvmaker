@@ -365,18 +365,20 @@ Exemples de SUPPRESSION :
 
 RÈGLES STRICTES :
 1. personal_info : copie EXACTEMENT le nom, email, téléphone et localisation depuis les CV source. Ne modifie JAMAIS ces champs.
-2. Compétences : MAX 8 compétences, UNIQUEMENT en lien DIRECT avec l'offre. Supprime tout le reste.
-3. Expériences : garde UNIQUEMENT les 2-3 expériences les plus pertinentes pour CE poste. Supprime toutes les autres.
-4. Education : garde UNIQUEMENT les diplômes en rapport avec le domaine de l'offre. Supprime les autres.
-5. Certifications : garde UNIQUEMENT celles pertinentes pour l'offre.
-6. Languages : garde UNIQUEMENT les langues mentionnées dans l'offre (ou le français par défaut).
-7. Le "title" doit être IDENTIQUE ou très proche de l'intitulé du poste dans l'offre.
-8. Le summary doit parler UNIQUEMENT de ce qui est pertinent pour cette offre.
-9. Chaque achievement doit être un CHIFFRE des CV source, adapté au contexte de l'offre.
-10. Langue du CV : {lang_rule} uniquement.
-11. Format dates : "Janvier 2020 - Décembre 2022" (mois en français).
-12. _target_company : extrais le nom de l'entreprise depuis l'offre.
-13. Réponds STRICTEMENT en JSON, sans texte avant ni après.
+2. Compétences (skills) : MAX 8 compétences, UNIQUEMENT en lien DIRECT avec l'offre. Supprime tout le reste.
+3. Outils (tools) : Dans "skills", utilise une catégorie séparée "Outils" pour les logiciels et outils (Kobo, ODK, SurveyCTO, Excel, Python, QGIS, etc.). NE LES MÉLANGE PAS avec les compétences générales.
+4. Expériences : garde UNIQUEMENT les 2-3 expériences les plus pertinentes. SUPPRIME les autres. ORDONNE-LES du plus récent au plus ancien (end_date décroissant).
+5. Education : garde UNIQUEMENT les diplômes en rapport avec le domaine. ORDONNE-LES du plus récent au plus ancien.
+6. Certifications : garde UNIQUEMENT celles pertinentes pour l'offre.
+7. Languages : garde UNIQUEMENT les langues mentionnées dans l'offre (ou le français par défaut).
+8. Le "title" doit être IDENTIQUE ou très proche de l'intitulé du poste dans l'offre.
+9. Le summary doit parler UNIQUEMENT de ce qui est pertinent pour cette offre.
+10. Chaque achievement doit être un CHIFFRE des CV source, adapté au contexte de l'offre.
+11. Langue du CV : {lang_rule} uniquement.
+12. Format dates : "Janvier 2020 - Décembre 2022" (mois en français). Les dates doivent être cohérentes et triables.
+13. _target_company : extrais le nom de l'entreprise depuis l'offre.
+14. ATS : Utilise des mots-clés de l'offre dans le summary et les compétences. Structure claire et lisible par un robot de recrutement.
+15. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
 ⚠️ ANTI-HALLUCINATION (RÈGLE ABSOLUE) :
 - Copie le nom, email, téléphone EXACTEMENT comme dans les CV source.
@@ -606,10 +608,40 @@ if st.session_state.profile:
 
         summary = opt_data.get("summary", profile.get("summary", ""))
         skills = opt_data.get("skills", profile.get("skills", {}))
+
+        def date_sort_key(x):
+            """Extract YYYYMM from date string for proper sorting."""
+            d = x.get("end_date", "") or x.get("start_date", "") or ""
+            months = {"janvier":"01","février":"02","fevrier":"02","mars":"03","avril":"04","mai":"05",
+                      "juin":"06","juillet":"07","août":"08","aout":"08","septembre":"09","octobre":"10",
+                      "novembre":"11","décembre":"12","decembre":"12",
+                      "january":"01","february":"02","march":"03","april":"04","may":"05","june":"06",
+                      "july":"07","august":"08","september":"09","october":"10","november":"11","december":"12",
+                      "jan":"01","feb":"02","mar":"03","apr":"04","jun":"06","jul":"07","aug":"08",
+                      "sep":"09","oct":"10","nov":"11","dec":"12"}
+            d_lower = d.lower().strip()
+            year = ""
+            month = "00"
+            for y in ["2027","2026","2025","2024","2023","2022","2021","2020","2019","2018","2017","2016","2015"]:
+                if y in d:
+                    year = y
+                    break
+            for m_name, m_num in months.items():
+                if m_name in d_lower:
+                    month = m_num
+                    break
+            if not year:
+                # Try to extract any 4-digit year
+                import re as _re
+                yr = _re.search(r"(\d{4})", d)
+                if yr:
+                    year = yr.group(1)
+            return year + month
+
         experience = sorted(opt_data.get("experience", profile.get("experience", [])),
-                            key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
+                            key=date_sort_key, reverse=True)
         education = sorted(profile.get("education", []),
-                           key=lambda x: x.get("end_date", x.get("start_date", "")), reverse=True)
+                           key=date_sort_key, reverse=True)
         languages = profile.get("languages", [])
 
         def esc_html(t):
@@ -676,7 +708,13 @@ if st.session_state.profile:
 </div>"""
 
         # Skills / Languages / Tools
-        tool_cats = {"Outils", "Tools", "Technologies", "Logiciels", "Outils Numériques"}
+        tool_cats = {"Outils", "Tools", "Technologies", "Logiciels", "Outils Numériques", "Logiciel", "Outil", "Tool", "Tools & Technologies"}
+        tool_names = {"kobo", "odk", "surveycto", "qlik", "powerbi", "power bi", "tableau", "excel", "word", "access",
+                      "python", "r", "stata", "spss", "sql", "postgis", "qgis", "arcgis", "gis",
+                      "ms office", "suite ms office", "google suite", "googlesheets", "google sheets",
+                      "kobo toolbox", "enumerate", "cspro", "moodle", "sakai", "canva", "figma",
+                      "syntax", "atlasti", "nvivo", "dedoose", "commcare", "sap", "erp", "crm",
+                      "sage", "quickbooks", "tally", "solarwinds", "wireshark", "cisco"}
         lang_list = [f"<li>{esc_html(l.get('lang',''))} : {esc_html(l.get('level',''))}</li>" for l in languages]
         tool_list = []
         skill_list = []
@@ -686,11 +724,15 @@ if st.session_state.profile:
                     tool_list.extend(f"<li>{esc_html(it)}</li>" for it in items)
                 else:
                     for it in items:
-                        skill_list.append(f"<li>{esc_html(it)}</li>")
+                        if it.lower().strip() in tool_names:
+                            tool_list.append(f"<li>{esc_html(it)}</li>")
+                        else:
+                            skill_list.append(f"<li>{esc_html(it)}</li>")
         if not lang_list: lang_list = ["<li>Fran\u00e7ais : Natif</li>"]
         if not tool_list: tool_list = ["<li>Suite MS Office</li>"]
         if not skill_list: skill_list = ["<li>P\u00e9dagogie</li>"]
         skill_list = skill_list[:8]
+        tool_list = tool_list[:8]
 
         # Section titles by language
         lang_tpl = st.session_state.get("cv_lang", "Fran\u00e7ais")
