@@ -45,6 +45,10 @@ if "sb_user" not in st.session_state:
     st.session_state.sb_user = None
 if "sb_client" not in st.session_state:
     st.session_state.sb_client = None
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "cache_key" not in st.session_state:
+    st.session_state.cache_key = None
 
 # ---------- Cloud sync (Supabase Auth) ----------
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "") or st.secrets.get("supabase", {}).get("url", "")
@@ -174,6 +178,24 @@ with st.sidebar:
                     st.session_state.source_texts = []
                     save_cloud()
                     st.rerun()
+
+            # ---------- Historique ----------
+            st.divider()
+            st.subheader("📜 Historique")
+            history = st.session_state.get("history", [])
+            if history:
+                for i, h in enumerate(history[-5:]):  # show last 5
+                    cols = st.columns([3, 1])
+                    with cols[0]:
+                        st.caption(f"📄 {h.get('name', '?')} — {h.get('poste', '?')}")
+                    with cols[1]:
+                        if st.button("📂", key=f"hist_{i}", help="Charger"):
+                            st.session_state.profile = h.get("profile")
+                            st.session_state.opt_data = h.get("profile")
+                            st.session_state.jd_text = h.get("jd", "")
+                            st.rerun()
+            else:
+                st.caption("Aucun CV généré pour l'instant.")
         else:
             with st.expander("🔐 Connexion / Inscription", expanded=True):
                 auth_email = st.text_input("Email", placeholder="ex: moi@email.com", key="auth_email")
@@ -296,6 +318,13 @@ if st.button(gen_label, type="primary", use_container_width=True):
     if len(combined) > 25000:
         combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
 
+    # --- Cache check ---
+    import hashlib
+    cache_key = hashlib.md5((combined + jd_text + cv_lang).encode()).hexdigest()
+    if st.session_state.get("cache_key") == cache_key and st.session_state.get("profile"):
+        st.info("♻️ Cache : même offre + mêmes CV → profil déjà généré.")
+        st.rerun()
+
     status.write("⏳ **Fusion + optimisation IA...**")
 
     lang_map = {"Français": "FRANÇAIS", "English": "ENGLISH", "Español": "ESPAÑOL", "Português": "PORTUGUÊS"}
@@ -368,6 +397,54 @@ Offre à cibler :
         st.info("💡 Relance la génération, l'IA peut parfois mal formater.")
         st.stop()
 
+    # --- Vérification post-génération ---
+    status.write("🔍 **Vérification anti-hallucination...**")
+    verify_prompt = f"""Voici un CV généré par IA. Vérifie s'il contient des informations qui ne sont PAS dans les CV source.
+
+CV généré :
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+CV source :
+{combined}
+
+Offre d'emploi :
+{jd_text}
+
+Retourne UNIQUEMENT un JSON avec cette structure :
+{{"corrections": {{ "champ_corrigé": "valeur_corrigée" }}, "issues": ["description du problème trouvé"]}}
+
+RÈGLES :
+- Si le nom, email ou téléphone ne correspond PAS aux CV source → corrige-le
+- Si une expérience, compétence ou formation n'est PAS dans les CV source → supprime-la
+- Si un chiffre ou résultat n'est PAS dans les CV source → supprime-le
+- Si tout est correct, retourne {{"corrections": {{}}, "issues": []}}
+- Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."""
+
+    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict. Tu détectes et corriges les hallucinations de l'IA.")
+    if verify_result:
+        verify_result = re.sub(r"```(?:json)?\s*", "", verify_result).strip()
+        v_match = re.search(r"\{.*\}", verify_result, re.DOTALL)
+        if v_match:
+            try:
+                verification = json.loads(v_match.group())
+                corrections = verification.get("corrections", {})
+                issues = verification.get("issues", [])
+                if corrections:
+                    for k, v in corrections.items():
+                        if "." in k:
+                            parts = k.split(".")
+                            obj = profile
+                            for p in parts[:-1]:
+                                obj = obj.get(p, {})
+                            obj[parts[-1]] = v
+                        else:
+                            profile[k] = v
+                    st.warning(f"🔧 {len(corrections)} correction(s) appliquée(s) : {', '.join(corrections.keys())}")
+                if issues:
+                    st.info(f"⚠️ {len(issues)} problème(s) détecté(s) : {'; '.join(issues[:3])}")
+            except json.JSONDecodeError:
+                pass
+
     status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
 
     save_cloud()
@@ -377,6 +454,18 @@ Offre à cibler :
     st.session_state.extracted = True
     st.session_state.cv_lang = cv_lang
     st.session_state.jd_text = jd_text
+    st.session_state.cache_key = cache_key
+
+    # Save to history
+    hist = st.session_state.get("history", [])
+    p_info = profile.get("personal_info", {})
+    hist.append({
+        "name": p_info.get("full_name", "?"),
+        "poste": p_info.get("title", "?"),
+        "jd": jd_text[:200],
+        "profile": profile,
+    })
+    st.session_state.history = hist[-10:]  # keep last 10
     st.rerun()
 
 # ---------- Edit & Generate PDF ----------
@@ -394,6 +483,37 @@ if st.session_state.profile:
         for cat, items in profile.get("skills", {}).items():
             if items:
                 st.markdown(f"**{cat} :** {', '.join(items)}")
+
+    # --- Score ATS ---
+    jd = st.session_state.get("jd_text", "")
+    if jd:
+        # Extract keywords from JD (simple approach)
+        jd_lower = jd.lower()
+        cv_text = json.dumps(profile, ensure_ascii=False).lower()
+        # Common ATS keywords (skills, tools, languages)
+        import re as re_mod
+        keywords = set()
+        # Extract words > 3 chars from JD
+        for word in re_mod.findall(r'\b[a-zA-Zàâäéèêëîïôöùûüÿç]{4,}\b', jd_lower):
+            if word not in ('dans', 'pour', 'avec', 'vous', 'nous', 'sont', 'être', 'avoir', 'cette', 'ceci', 'ainsi', 'mais', 'donc', 'plus', 'très', 'tout', 'tous', 'toute', 'toutes', 'leur', 'leurs', 'sous', 'sur', 'des', 'les', 'une', 'aux', 'par', 'que', 'qui', 'est', 'ont', 'ses', 'son', 'sa ', ' de '):
+                keywords.add(word)
+        # Check which keywords are in CV
+        found = [k for k in keywords if k in cv_text]
+        missing = [k for k in keywords if k not in cv_text]
+        total = len(keywords) or 1
+        score = int(len(found) / total * 100)
+
+        with st.expander(f"🎯 Score ATS : {score}%", expanded=False):
+            st.progress(score / 100)
+            if score >= 70:
+                st.success(f"✅ Excellent ! {len(found)}/{total} mots-clés présents.")
+            elif score >= 40:
+                st.warning(f"⚠️ Moyen. {len(found)}/{total} mots-clés présents.")
+            else:
+                st.error(f"❌ Faible. {len(found)}/{total} mots-clés présents.")
+            if missing:
+                st.markdown("**Mots-clés manquants (à ajouter si pertinent) :**")
+                st.code(", ".join(sorted(missing)[:20]))
 
     # Let user edit personal info before PDF generation
     st.subheader("✏️ Vérifie et modifie tes informations")
@@ -770,5 +890,64 @@ Offre d'emploi :
         cl_filename = "_".join(cl_parts) + ".txt"
         st.download_button("📥 Télécharger la lettre (.txt)", data=cl_text.encode("utf-8"),
                            file_name=cl_filename, use_container_width=True)
+
+        # PDF export for cover letter
+        if st.button("📄 Générer la lettre en PDF", use_container_width=True, key="gen_cl_pdf"):
+            with st.spinner("📄 Génération du PDF..."):
+                import tempfile, os, subprocess, sys, base64 as b64mod
+                from pathlib import Path as P
+
+                def cl_esc(t):
+                    if not t: return ""
+                    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+                # Convert markdown-ish to HTML paragraphs
+                cl_html_body = ""
+                for line in cl_text.split("\n"):
+                    line = line.strip()
+                    if line:
+                        cl_html_body += f"<p>{cl_esc(line)}</p>\n"
+                    else:
+                        cl_html_body += "<br/>\n"
+
+                cl_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+<style>
+@page {{ size: A4; margin: 20mm; }}
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'Montserrat', sans-serif; font-size: 12px; color: #333; line-height: 1.6; }}
+p {{ margin-bottom: 10px; }}
+</style></head><body>{cl_html_body}</body></html>"""
+
+                out_file = P(tempfile.mktemp(suffix=".pdf"))
+                is_linux = sys.platform.startswith("linux")
+                if is_linux:
+                    from weasyprint import HTML
+                    HTML(string=cl_html).write_pdf(out_file)
+                else:
+                    edge_candidates = [
+                        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                    ]
+                    edge = next((e for e in edge_candidates if os.path.exists(e)), None)
+                    if edge:
+                        html_path = P(tempfile.mktemp(suffix=".html"))
+                        html_path.write_text(cl_html, encoding="utf-8")
+                        subprocess.run(
+                            [edge, "--headless", f"--print-to-pdf={out_file}", "--disable-gpu",
+                             "--no-first-run", f"file:///{html_path.as_posix()}"],
+                            capture_output=True, timeout=60,
+                        )
+
+                if out_file.exists():
+                    with open(out_file, "rb") as f:
+                        cl_pdf_bytes = f.read()
+                    cl_pdf_filename = "_".join(cl_parts) + ".pdf"
+                    st.download_button("📄 Télécharger la lettre (PDF)", data=cl_pdf_bytes,
+                                       file_name=cl_pdf_filename, mime="application/pdf",
+                                       use_container_width=True, key="dl_cl_pdf")
+                else:
+                    st.error("❌ Erreur génération PDF LM.")
 
 
