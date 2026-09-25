@@ -490,7 +490,7 @@ RÈGLES DE SUPPRESSION/CORRECTION :
 - Dates incohérentes ou mal formatées → corrige-les ("Janvier 2020 - Décembre 2022")
 - Expériences non classées du plus récent au plus ancien → réordonne-les
 - Outil (Kobo, ODK, QGIS, etc.) placé dans les compétences au lieu de "Outils" → déplace-le
-- Rien à corriger → {"cv": le CV reçu inchangé, "issues": []}
+- Rien à corriger → retourne le CV inchangé dans "cv" et une liste "issues" vide
 - Le champ "cv" doit être le CV COMPLET (pas un extrait), avec la même structure que le CV généré.
 - Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."""
 
