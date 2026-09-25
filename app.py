@@ -412,25 +412,36 @@ Offre à cibler :
         st.stop()
 
     # --- Vérification post-génération ---
-    status.write("🔍 **Vérification...**")
-    verify_prompt = f"""Vérifie ce CV pour cette offre. Corrige uniquement si nécessaire.
+    status.write("🔍 **Vérification pertinence + anti-hallucination...**")
+    verify_prompt = f"""Voici un CV généré par IA pour une offre d'emploi. Vérifie DEUX choses :
 
-CV :
-{json.dumps(profile, ensure_ascii=False)}
+1. PERTINENCE : Est-ce que chaque élément du CV a un rapport avec l'offre ? Si non → supprime-le.
+2. ANTI-HALLUCINATION : Est-ce que chaque info existe dans les CV source ? Si non → corrige-le.
 
-Source (extraits) :
-{combined[:6000]}
+CV généré :
+{json.dumps(profile, ensure_ascii=False, indent=2)}
 
-Offre :
-{jd_text[:2000]}
+CV source :
+{combined}
 
-Retourne UNIQUEMENT : {{"corrections": {{}}, "issues": []}}
-- Nom/email/téléphone != source → corrige
-- Info pas dans la source → supprime
-- Sans rapport avec l'offre → supprime
-- Tout OK → {{"corrections": {{}}, "issues": []}}"""
+Offre d'emploi :
+{jd_text}
 
-    verify_result = call_ai(verify_prompt, "Vérificateur de CV. Retourne UNIQUEMENT du JSON.")
+Retourne UNIQUEMENT un JSON avec cette structure :
+{{"corrections": {{ "champ_corrigé": "valeur_corrigée" }}, "issues": ["description du problème trouvé"]}}
+
+RÈGLES :
+- Si le nom, email ou téléphone ne correspond PAS aux CV source → corrige-le
+- Si une expérience, compétence ou formation n'est PAS dans les CV source → supprime-la
+- Si un élément n'a AUCUN rapport avec l'offre → supprime-le (liste-le dans "issues")
+- Si un chiffre ou résultat n'est PAS dans les CV source → supprime-le
+- Si une date est incohérente ou mal formatée → corrige-la
+- Si les expériences ne sont pas du plus récent au plus ancien → réordonne-les
+- Si un outil (Kobo, ODK, etc.) est dans les compétences au lieu des outils → déplace-le
+- Si tout est correct, retourne {{"corrections": {{}}, "issues": []}}
+- Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."""
+
+    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict et qualitatif. Tu détectes les pertinences, hallucinations et erreurs de format.")
     if verify_result:
         verify_result = re.sub(r"```(?:json)?\s*", "", verify_result).strip()
         v_match = re.search(r"\{.*\}", verify_result, re.DOTALL)
