@@ -305,7 +305,7 @@ if st.button(gen_label, type="primary", use_container_width=True):
 Fusionne TOUTES les informations de tous les CV en un profil complet, puis génère un CV optimisé pour l'offre.
 
 Retourne UNIQUEMENT un JSON avec cette structure :
-{{{{
+{{{{ 
   "personal_info": {{ "full_name": "", "email": "", "phone": "", "location": "", "title": "" }},
   "summary": "RÉSUMÉ OPTIMISÉ (4-5 lignes percutantes, riche en mots-clés de l'offre)",
   "skills": {{ "catégorie": ["compétence1", "compétence2", ...] }},
@@ -319,20 +319,23 @@ Retourne UNIQUEMENT un JSON avec cette structure :
 }}}}
 
 RÈGLES STRICTES :
-1. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
-2. Expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
-3. Compétences : ne liste QUE les compétences techniques en lien DIRECT avec l'offre, max 8.
-4. Le "title" dans personal_info doit être SIMILAIRE ou IDENTIQUE à l'intitulé du poste dans l'offre.
-5. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
-6. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE
-7. Garde les vraies expériences, n'invente RIEN
-8. Langue du CV : {lang_rule} uniquement, orthographe parfaite. Supprime toute mention du Baoulé ou dialectes locaux.
-9. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation").
-10. Format des dates : si même année → "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes → "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Mois en français.
-11. _target_company : extrais le nom de l'entreprise depuis l'offre d'emploi.
-12. Réponds STRICTEMENT en JSON, sans texte avant ni après.
+1. personal_info : copie EXACTEMENT le nom, email, téléphone et localisation depuis les CV source. Ne modifie, ne corrige, ne complète JAMAIS ces champs. Le nom doit être identique caractère pour caractère.
+2. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
+3. Expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
+4. Compétences : ne liste QUE les compétences techniques en lien DIRECT avec l'offre, max 8.
+5. Le "title" dans personal_info doit être SIMILAIRE ou IDENTIQUE à l'intitulé du poste dans l'offre.
+6. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
+7. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE — mais UNIQUEMENT si ce chiffre existe dans les CV source.
+8. Garde les vraies expériences, n'invente RIEN
+9. Langue du CV : {lang_rule} uniquement, orthographe parfaite. Supprime toute mention du Baoulé ou dialectes locaux.
+10. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation").
+11. Format des dates : si même année → "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes → "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Mois en français.
+12. _target_company : extrais le nom de l'entreprise depuis l'offre d'emploi.
+13. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
 ⚠️ ANTI-HALLUCINATION (RÈGLE ABSOLUE) :
+- Copie le nom, email, téléphone EXACTEMENT comme dans les CV source. Ne change JAMAIS ces informations.
+- Si un champ est vide dans les CV source, laisse-le vide. Ne complète JAMAIS avec des infos inventées.
 - N'invente JAMAIS de chiffres, de résultats, de noms d'entreprises, de postes ou de compétences qui ne sont PAS dans les CV source.
 - Si un CV ne contient pas de chiffres pour une expérience, réécris la réalisation SANS en ajouter.
 - Ne crée PAS de nouvelles expériences professionnelles. Utilise UNIQUEMENT celles présentes dans les CV.
