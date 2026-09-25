@@ -258,7 +258,14 @@ def call_ai(prompt: str, system: str = "") -> str:
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+            data = resp.json()
+            choices = data.get("choices")
+            if not choices or not choices[0].get("message", {}).get("content"):
+                err = data.get("error", {}).get("message", str(data)[:200])
+                st.warning(f"⏳ tentative {attempt+1}/3 - Réponse vide : {err}")
+                time.sleep(15)
+                continue
+            return choices[0]["message"]["content"].strip()
         except Exception as e:
             st.warning(f"⚠️ tentative {attempt+1}/3 : {e}")
             if attempt == 2:
@@ -311,6 +318,11 @@ if st.button(gen_label, type="primary", use_container_width=True):
     if not all_texts:
         st.error("❌ Aucun texte extrait des PDF.")
         st.stop()
+
+    # Limit to 5 most recent CVs (too many = prompt too large = API errors)
+    if len(all_texts) > 5:
+        st.warning(f"⚠️ {len(all_texts)} CV sources — utilisation des 5 plus récents uniquement.")
+        all_texts = all_texts[-5:]
 
     all_texts = [t[:8000] for t in all_texts]
     st.session_state.source_texts = all_texts  # store for later re-use
