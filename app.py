@@ -236,43 +236,50 @@ with st.sidebar:
 # ---------- AI Call ----------
 def call_ai(prompt: str, system: str = "") -> str:
     key = os.environ.get("OPENROUTER_API_KEY", "")
-    for attempt in range(3):
-        try:
-            resp = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": 0.1,
-                },
-                timeout=300,
-            )
-            if resp.status_code == 429:
-                err_msg = resp.json().get("error",{}).get("message","429")
-                wait = 60
-                st.warning(f"⏳ tentative {attempt+1}/3 - {err_msg[:100]}. Attente {wait}s...")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-            choices = data.get("choices")
-            if not choices or not choices[0].get("message", {}).get("content"):
-                err = data.get("error", {}).get("message", str(data)[:200])
-                st.warning(f"⏳ tentative {attempt+1}/3 - Réponse vide : {err}")
-                time.sleep(15)
-                continue
-            return choices[0]["message"]["content"].strip()
-        except Exception as e:
-            st.warning(f"⚠️ tentative {attempt+1}/3 : {e}")
-            if attempt == 2:
-                st.error(f"❌ Erreur API après 3 tentatives : {e}")
-                return ""
-            time.sleep(10)
-    st.error("❌ Échec API : toutes les tentatives ont épuisé.")
+    models = [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash-0731:free",
+        "openrouter/free",
+    ]
+    for model in models:
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.1,
+                    },
+                    timeout=300,
+                )
+                if resp.status_code == 429:
+                    err_msg = resp.json().get("error",{}).get("message","429")
+                    wait = 30
+                    st.warning(f"⏳ {model} — tentative {attempt+1}/3 : {err_msg[:80]}. Attente {wait}s...")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                choices = data.get("choices")
+                if not choices or not choices[0].get("message", {}).get("content"):
+                    err = data.get("error", {}).get("message", str(data)[:150])
+                    st.warning(f"⏳ {model} — tentative {attempt+1}/3 : {err}")
+                    time.sleep(10)
+                    continue
+                return choices[0]["message"]["content"].strip()
+            except Exception as e:
+                st.warning(f"⚠️ {model} — tentative {attempt+1}/3 : {e}")
+                if attempt == 2:
+                    break  # try next model
+                time.sleep(10)
+        st.warning(f"🔄 {model} indisponible, essai du modèle suivant...")
+    st.error("❌ Tous les modèles sont indisponibles. Réessaie dans quelques minutes.")
+    return ""
     return ""
 
 
@@ -318,11 +325,6 @@ if st.button(gen_label, type="primary", use_container_width=True):
     if not all_texts:
         st.error("❌ Aucun texte extrait des PDF.")
         st.stop()
-
-    # Limit to 5 most recent CVs (too many = prompt too large = API errors)
-    if len(all_texts) > 5:
-        st.warning(f"⚠️ {len(all_texts)} CV sources — utilisation des 5 plus récents uniquement.")
-        all_texts = all_texts[-5:]
 
     all_texts = [t[:8000] for t in all_texts]
     st.session_state.source_texts = all_texts  # store for later re-use
