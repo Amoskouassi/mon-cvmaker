@@ -328,9 +328,36 @@ if st.button(gen_label, type="primary", use_container_width=True):
 
     all_texts = [t[:8000] for t in all_texts]
     st.session_state.source_texts = all_texts  # store for later re-use
+
+    MAX_CHARS = 25000
     combined = "\n\n".join(all_texts)
-    if len(combined) > 25000:
-        combined = combined[:25000] + "\n\n[... suite tronquée pour la limite de l'API]"
+    if len(combined) > MAX_CHARS:
+        # Trop de CV pour la limite API → échantillonner la moitié (répartie sur toute la liste)
+        n = max(1, len(all_texts) // 2)
+        step = len(all_texts) / n
+        sampled = []
+        for i in range(n):
+            t = all_texts[int(i * step)]
+            if t not in sampled:
+                sampled.append(t)
+        seps = 2 * (len(sampled) - 1)
+        per_cv = max(500, (MAX_CHARS - seps) // len(sampled))
+        pieces = [t[:per_cv] for t in sampled]
+        # Redistribuer le budget non utilisé sur les CV tronqués
+        used = sum(len(p) for p in pieces) + seps
+        leftover = MAX_CHARS - used
+        if leftover > 0:
+            for i, t in enumerate(sampled):
+                if leftover <= 0:
+                    break
+                if len(pieces[i]) < len(t):
+                    extra = min(leftover, len(t) - len(pieces[i]))
+                    pieces[i] += t[len(pieces[i]):len(pieces[i]) + extra]
+                    leftover -= extra
+        combined = "\n\n".join(pieces)
+        status.write(f"✂️ {len(all_texts)} CV détectés → échantillon de la moitié ({len(sampled)} CV) pour la limite de l'API.")
+    if len(combined) > MAX_CHARS:
+        combined = combined[:MAX_CHARS] + "\n\n[... suite tronquée pour la limite de l'API]"
 
     # --- Cache check ---
     import hashlib
