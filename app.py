@@ -331,7 +331,7 @@ if st.button(gen_label, type="primary", use_container_width=True):
     lang_rule = lang_map.get(cv_lang, "FRANÇAIS")
 
     full_prompt = f"""Tu reçois plusieurs CV d'une même personne ET une offre d'emploi.
-Fusionne TOUTES les informations de tous les CV en un profil complet, puis génère un CV optimisé pour l'offre.
+Ta mission : créer un CV SUR-MESURE pour cette offre précise. Tu ne gardes QUE ce qui est pertinent pour cette offre.
 
 Retourne UNIQUEMENT un JSON avec cette structure :
 {{{{ 
@@ -347,31 +347,43 @@ Retourne UNIQUEMENT un JSON avec cette structure :
   "_target_company": "Nom de l'entreprise qui recrute (extrait de l'offre)"
 }}}}
 
+⚠️ RÈGLE D'OR : FILTRAGE AGRESSIF
+Avant d'écrire le JSON, analyse l'offre d'emploi et identifie :
+- Les compétences TECHNIQUES demandées
+- Le domaine d'activité
+- Le type de poste
+
+Ensuite, pour CHAQUE élément des CV source, pose-toi la question : "Est-ce que ceci aide à obtenir CE poste précis ?"
+- SI OUI → garde-le et optimise-le pour l'offre
+- SI NON → SUPPRIME-LE complètement
+
+Exemples de SUPPRESSION :
+- Tu postules en dev web → SUPPRIME les expériences de cuisine, vente, manutention
+- Tu postules en comptabilité → SUPPRIME les compétences de design graphique
+- Le poste ne mentionne pas l'anglais → SUPPRIME les langues sauf le français
+- Une formation sans rapport avec le poste → SUPPRIME-la
+
 RÈGLES STRICTES :
-1. personal_info : copie EXACTEMENT le nom, email, téléphone et localisation depuis les CV source. Ne modifie, ne corrige, ne complète JAMAIS ces champs. Le nom doit être identique caractère pour caractère.
-2. Fusionne TOUTES les infos de tous les CV sans rien perdre (diplômes, compétences, langues). Inclus TOUS les diplômes : Baccalauréat, Licence, Master, etc.
-3. Expériences : ne garde que les 2 ou 3 PLUS PERTINENTES pour l'offre. Ignore les expériences sans rapport.
-4. Compétences : ne liste QUE les compétences techniques en lien DIRECT avec l'offre, max 8.
-5. Le "title" dans personal_info doit être SIMILAIRE ou IDENTIQUE à l'intitulé du poste dans l'offre.
-6. Le summary doit être OPTIMISÉ pour l'offre : utilise ses mots-clés, montre l'impact
-7. Chaque optimized_achievement doit contenir un CHIFFRE ou un RÉSULTAT MESURABLE — mais UNIQUEMENT si ce chiffre existe dans les CV source.
-8. Garde les vraies expériences, n'invente RIEN
-9. Langue du CV : {lang_rule} uniquement, orthographe parfaite. Supprime toute mention du Baoulé ou dialectes locaux.
-10. Education : le champ "degree" doit TOUJOURS inclure la discipline (ex: "Master en Biochimie", "Licence en Sciences de l'Éducation").
-11. Format des dates : si même année → "Mois - Mois Année" (ex: "Janvier - Décembre 2020"). Si années différentes → "Mois Année - Mois Année" (ex: "Janvier 2020 - Décembre 2022"). Mois en français.
-12. _target_company : extrais le nom de l'entreprise depuis l'offre d'emploi.
+1. personal_info : copie EXACTEMENT le nom, email, téléphone et localisation depuis les CV source. Ne modifie JAMAIS ces champs.
+2. Compétences : MAX 8 compétences, UNIQUEMENT en lien DIRECT avec l'offre. Supprime tout le reste.
+3. Expériences : garde UNIQUEMENT les 2-3 expériences les plus pertinentes pour CE poste. Supprime toutes les autres.
+4. Education : garde UNIQUEMENT les diplômes en rapport avec le domaine de l'offre. Supprime les autres.
+5. Certifications : garde UNIQUEMENT celles pertinentes pour l'offre.
+6. Languages : garde UNIQUEMENT les langues mentionnées dans l'offre (ou le français par défaut).
+7. Le "title" doit être IDENTIQUE ou très proche de l'intitulé du poste dans l'offre.
+8. Le summary doit parler UNIQUEMENT de ce qui est pertinent pour cette offre.
+9. Chaque achievement doit être un CHIFFRE des CV source, adapté au contexte de l'offre.
+10. Langue du CV : {lang_rule} uniquement.
+11. Format dates : "Janvier 2020 - Décembre 2022" (mois en français).
+12. _target_company : extrais le nom de l'entreprise depuis l'offre.
 13. Réponds STRICTEMENT en JSON, sans texte avant ni après.
 
 ⚠️ ANTI-HALLUCINATION (RÈGLE ABSOLUE) :
-- Copie le nom, email, téléphone EXACTEMENT comme dans les CV source. Ne change JAMAIS ces informations.
-- Si un champ est vide dans les CV source, laisse-le vide. Ne complète JAMAIS avec des infos inventées.
-- N'invente JAMAIS de chiffres, de résultats, de noms d'entreprises, de postes ou de compétences qui ne sont PAS dans les CV source.
-- Si un CV ne contient pas de chiffres pour une expérience, réécris la réalisation SANS en ajouter.
-- Ne crée PAS de nouvelles expériences professionnelles. Utilise UNIQUEMENT celles présentes dans les CV.
-- Ne crée PAS de nouvelles certifications ou formations. Utilise UNIQUEMENT celles présentes dans les CV.
-- Les "optimized_achievements" doivent être des RÉÉCRITURES de ce qui existe déjà, pas des inventions.
-- Si tu n'as pas assez de matière, reduis le nombre d'expériences plutôt qu'en inventer.
-- En cas de doute sur une info, SUPPRIME-la au lieu d'inventer.
+- Copie le nom, email, téléphone EXACTEMENT comme dans les CV source.
+- Si un champ est vide dans les CV source, laisse-le vide.
+- N'invente JAMAIS de chiffres, résultats, entreprises, postes ou compétences.
+- Ne crée PAS de nouvelles expériences. Utilise UNIQUEMENT celles des CV source.
+- En cas de doute → SUPPRIME au lieu d'ajouter.
 
 CVs à fusionner :
 {combined}
@@ -398,8 +410,11 @@ Offre à cibler :
         st.stop()
 
     # --- Vérification post-génération ---
-    status.write("🔍 **Vérification anti-hallucination...**")
-    verify_prompt = f"""Voici un CV généré par IA. Vérifie s'il contient des informations qui ne sont PAS dans les CV source.
+    status.write("🔍 **Vérification pertinence + anti-hallucination...**")
+    verify_prompt = f"""Voici un CV généré par IA pour une offre d'emploi. Vérifie DEUX choses :
+
+1. PERTINENCE : Est-ce que chaque élément du CV a un rapport avec l'offre ? Si non → supprime-le.
+2. ANTI-HALLUCINATION : Est-ce que chaque info existe dans les CV source ? Si non → corrige-le.
 
 CV généré :
 {json.dumps(profile, ensure_ascii=False, indent=2)}
@@ -416,11 +431,12 @@ Retourne UNIQUEMENT un JSON avec cette structure :
 RÈGLES :
 - Si le nom, email ou téléphone ne correspond PAS aux CV source → corrige-le
 - Si une expérience, compétence ou formation n'est PAS dans les CV source → supprime-la
+- Si un élément n'a AUCUN rapport avec l'offre → supprime-le (liste-le dans "issues")
 - Si un chiffre ou résultat n'est PAS dans les CV source → supprime-le
 - Si tout est correct, retourne {{"corrections": {{}}, "issues": []}}
 - Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."""
 
-    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict. Tu détectes et corriges les hallucinations de l'IA.")
+    verify_result = call_ai(verify_prompt, "Tu es un vérificateur de CV strict. Tu détectes les pertinences et hallucinations.")
     if verify_result:
         verify_result = re.sub(r"```(?:json)?\s*", "", verify_result).strip()
         v_match = re.search(r"\{.*\}", verify_result, re.DOTALL)
