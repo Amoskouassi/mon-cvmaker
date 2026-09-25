@@ -424,6 +424,11 @@ Offre à cibler :
         st.code(result_json[:1500])
         st.info("💡 Relance la génération, l'IA peut parfois mal formater.")
         st.stop()
+    if not isinstance(profile, dict):
+        st.error("❌ L'IA n'a pas retourné un objet CV valide.")
+        st.code(str(profile)[:1500])
+        st.info("💡 Relance la génération.")
+        st.stop()
 
     # --- Vérification post-génération ---
     status.write("🔍 **Vérification pertinence + anti-hallucination...**")
@@ -462,23 +467,50 @@ RÈGLES :
         if v_match:
             try:
                 verification = json.loads(v_match.group())
+                if not isinstance(verification, dict):
+                    raise ValueError("verification not a dict")
                 corrections = verification.get("corrections", {})
                 issues = verification.get("issues", [])
+                if not isinstance(corrections, dict):
+                    corrections = {}
+                if not isinstance(issues, list):
+                    issues = [str(issues)]
                 if corrections:
                     for k, v in corrections.items():
-                        if "." in k:
-                            parts = k.split(".")
-                            obj = profile
-                            for p in parts[:-1]:
-                                obj = obj.get(p, {})
-                            obj[parts[-1]] = v
-                        else:
-                            profile[k] = v
-                    st.warning(f"🔧 {len(corrections)} correction(s) appliquée(s) : {', '.join(corrections.keys())}")
+                        try:
+                            if "." in k:
+                                parts = k.split(".")
+                                obj = profile
+                                for p in parts[:-1]:
+                                    if isinstance(obj, dict):
+                                        obj = obj.get(p, {})
+                                    elif isinstance(obj, list) and p.isdigit():
+                                        idx = int(p)
+                                        obj = obj[idx] if idx < len(obj) else None
+                                    else:
+                                        obj = None
+                                        break
+                                if isinstance(obj, dict):
+                                    obj[parts[-1]] = v
+                            else:
+                                profile[k] = v
+                        except (AttributeError, IndexError, TypeError):
+                            pass
+                    st.warning(f"🔧 {len(corrections)} correction(s) appliquée(s) : {', '.join(str(k) for k in corrections.keys())}")
                 if issues:
-                    st.info(f"⚠️ {len(issues)} problème(s) détecté(s) : {'; '.join(issues[:3])}")
-            except json.JSONDecodeError:
+                    st.info(f"⚠️ {len(issues)} problème(s) détecté(s) : {'; '.join(str(i) for i in issues[:3])}")
+            except Exception:
                 pass
+
+    # Normalisation de sécurité du profil
+    if not isinstance(profile, dict):
+        st.error("❌ Profil invalide après vérification.")
+        st.stop()
+    if not isinstance(profile.get("personal_info"), dict):
+        profile["personal_info"] = {}
+    for kf in ("summary", "title"):
+        if not isinstance(profile.get(kf, ""), str):
+            profile[kf] = str(profile.get(kf, ""))
 
     status.update(label="✅ **CV fusionné et optimisé !**", state="complete", expanded=False)
 
@@ -515,9 +547,11 @@ if st.session_state.profile:
         p = profile.get("personal_info", {})
         st.markdown(f"**{p.get('full_name','?')}** — {p.get('title','')} — {p.get('location','')}")
         st.markdown(f"**Résumé :** {profile.get('summary','')}")
-        for cat, items in profile.get("skills", {}).items():
-            if items:
-                st.markdown(f"**{cat} :** {', '.join(items)}")
+        sk = profile.get("skills", {})
+        if isinstance(sk, dict):
+            for cat, items in sk.items():
+                if items:
+                    st.markdown(f"**{cat} :** {', '.join(str(i) for i in items)}")
 
     # --- Score ATS ---
     jd = st.session_state.get("jd_text", "")
@@ -625,6 +659,8 @@ if st.session_state.profile:
 
         summary = opt_data.get("summary", profile.get("summary", ""))
         skills = opt_data.get("skills", profile.get("skills", {}))
+        if not isinstance(skills, dict):
+            skills = {}
 
         def date_sort_key(x):
             """Extract YYYYMM from date string for proper sorting."""
@@ -655,11 +691,19 @@ if st.session_state.profile:
                     year = yr.group(1)
             return year + month
 
-        experience = sorted(opt_data.get("experience", profile.get("experience", [])),
+        def as_list(v):
+            return v if isinstance(v, list) else []
+
+        def as_dicts(v):
+            return [x for x in as_list(v) if isinstance(x, dict)]
+
+        experience = sorted(as_dicts(opt_data.get("experience", profile.get("experience", []))),
                             key=date_sort_key, reverse=True)
-        education = sorted(profile.get("education", []),
+        education = sorted(as_dicts(profile.get("education", [])),
                            key=date_sort_key, reverse=True)
         languages = profile.get("languages", [])
+        if not isinstance(languages, list):
+            languages = []
 
         def esc_html(t):
             if not t: return ""
@@ -906,7 +950,12 @@ if st.session_state.profile:
         cl_title = profile.get("personal_info", {}).get("title", "") or opt_data.get("title", "")
         cl_summary = opt_data.get("summary", profile.get("summary", ""))
         cl_skills = opt_data.get("skills", profile.get("skills", {}))
+        if not isinstance(cl_skills, dict):
+            cl_skills = {}
         cl_experience = opt_data.get("experience", profile.get("experience", []))
+        if not isinstance(cl_experience, list):
+            cl_experience = []
+        cl_experience = [e for e in cl_experience if isinstance(e, dict)]
         cl_sk_list = []
         for cat, items in cl_skills.items():
             if items:
